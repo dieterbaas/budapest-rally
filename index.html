@@ -62,14 +62,6 @@
 <div class="wrap">
   <div id="status"></div>
 
-  <div class="me">
-    <span>Ik ben:</span>
-    <button class="chip" data-me="Dieter">Dieter</button>
-    <button class="chip" data-me="Roos">Roos</button>
-    <button class="chip" data-me="Sebastiaan">Sebastiaan</button>
-    <button class="chip" data-me="Rik">Rik</button>
-  </div>
-
   <div class="bar"><i id="progbar"></i></div>
   <div class="prog" id="progtxt">—</div>
 
@@ -196,7 +188,6 @@ const SEED = [
  ["ra5","Rally-fun (= punten!)","Rood interieur-accent (quick win)",1],
 ];
 
-let me = localStorage.getItem("rally_me") || null;
 let filter = "all";
 let items = {}; // item_id -> {category,label,note,checked,checked_by,sort}
 let sb = null;
@@ -204,10 +195,6 @@ let sb = null;
 const $ = s => document.querySelector(s);
 const initials = n => (n||"?")[0];
 const esc = s => (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-
-function setMeUI(){
-  document.querySelectorAll("[data-me]").forEach(b=>b.classList.toggle("active", b.dataset.me===me));
-}
 
 function sortedCats(){
   const present = [...new Set(Object.values(items).map(i=>i.category||"Overig"))];
@@ -238,9 +225,7 @@ function render(){
       el.className="item"+(v.checked?" done":"");
       el.innerHTML=`
         <div class="box" data-toggle="${id}">${v.checked?"✓":""}</div>
-        <div class="label" data-toggle="${id}"><b>${esc(v.label)}</b>${v.note?'<span class="tag">extra</span>':''}
-          ${v.checked&&v.checked_by?`<span class="by"><span class="av ${v.checked_by}">${initials(v.checked_by)}</span> ${esc(v.checked_by)}</span>`:''}
-        </div>
+        <div class="label" data-toggle="${id}"><b>${esc(v.label)}</b>${v.note?'<span class="tag">extra</span>':''}</div>
         <button class="del" data-del="${id}" title="Verwijderen">✕</button>`;
       list.appendChild(el);
     }
@@ -251,13 +236,12 @@ function render(){
 }
 
 async function toggle(id){
-  if(!me){ alert("Kies eerst bovenaan wie je bent."); return; }
   const v = items[id]; if(!v) return;
   const next = !v.checked;
-  v.checked=next; v.checked_by = next?me:null;
+  v.checked=next;
   render();
   if(sb){
-    const {error}=await sb.from("checklist").update({checked:next,checked_by:next?me:null,updated_at:new Date().toISOString()}).eq("item_id",id);
+    const {error}=await sb.from("checklist").update({checked:next,updated_at:new Date().toISOString()}).eq("item_id",id);
     if(error) banner("⚠️ Opslaan mislukt: "+error.message,true);
   }
 }
@@ -313,7 +297,6 @@ function initRealtime(){
 }
 
 // events
-document.querySelectorAll("[data-me]").forEach(b=>{ b.onclick=()=>{ me=b.dataset.me; localStorage.setItem("rally_me",me); setMeUI(); }; });
 $("#add-btn").onclick=addItem;
 $("#add-label").addEventListener("keydown",e=>{ if(e.key==="Enter") addItem(); });
 $("#list").addEventListener("click",e=>{
@@ -326,7 +309,7 @@ $("#f-open").onclick=()=>{filter="open";setFilterUI();render();};
 $("#f-done").onclick=()=>{filter="done";setFilterUI();render();};
 function setFilterUI(){ $("#f-all").classList.toggle("on",filter==="all"); $("#f-open").classList.toggle("on",filter==="open"); $("#f-done").classList.toggle("on",filter==="done"); }
 
-setMeUI(); render();
+render();
 if(SUPABASE_URL.includes("VUL_IN")||SUPABASE_KEY.includes("VUL_IN")){
   banner("⚠️ Nog niet gekoppeld aan Supabase — zie ⚙️ setup.",true);
 }else{
