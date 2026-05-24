@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Budapest Rally 2026 — Checklist</title>
+<style>
+  :root{
+    --bg:#0f1226; --card:#1a1f3d; --card2:#232a52; --line:#2e3766;
+    --txt:#eef1ff; --mut:#9aa3d4; --acc:#ff5a5f; --ok:#3ddc97; --warn:#ffcf5c;
+    --d:#5b8cff; --r:#ff7eb6; --s:#ffb454; --k:#54e0c7;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt);}
+  header{padding:18px 16px;background:linear-gradient(135deg,#1a1f3d,#2a1f4d);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5;}
+  h1{margin:0;font-size:20px;}
+  .sub{color:var(--mut);font-size:13px;margin-top:4px}
+  .wrap{max-width:860px;margin:0 auto;padding:16px;}
+  .me{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:14px 0}
+  .me span{color:var(--mut);font-size:13px}
+  .chip{border:1px solid var(--line);background:var(--card);color:var(--txt);padding:7px 12px;border-radius:999px;cursor:pointer;font-size:14px}
+  .chip.active{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+  .bar{height:10px;background:var(--card2);border-radius:999px;overflow:hidden;margin:10px 0 4px}
+  .bar > i{display:block;height:100%;background:linear-gradient(90deg,var(--ok),#2bb0ff);width:0;transition:width .3s}
+  .prog{font-size:13px;color:var(--mut)}
+  .cat{margin:20px 0 8px;font-size:15px;font-weight:700;display:flex;justify-content:space-between;align-items:center}
+  .cat small{color:var(--mut);font-weight:500}
+  .item{display:flex;gap:12px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px;transition:.15s}
+  .item:hover{border-color:#3d4889}
+  .item.done{background:var(--card2);border-color:#2a5a45}
+  .box{width:22px;height:22px;border-radius:6px;border:2px solid var(--line);flex:none;margin-top:1px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff;cursor:pointer}
+  .item.done .box{background:var(--ok);border-color:var(--ok)}
+  .label{flex:1;cursor:pointer}
+  .label b{font-weight:600}
+  .tag{font-size:10px;text-transform:uppercase;letter-spacing:.5px;padding:2px 6px;border-radius:5px;background:#3a2a55;color:var(--warn);margin-left:6px;vertical-align:middle}
+  .by{font-size:12px;color:var(--mut);white-space:nowrap;margin-top:3px;display:block}
+  .av{display:inline-flex;width:20px;height:20px;border-radius:50%;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#0b0e1f}
+  .Dieter{background:var(--d)} .Roos{background:var(--r)} .Sebastiaan{background:var(--s)} .Rik{background:var(--k)}
+  .del{flex:none;background:none;border:none;color:#6b73a8;font-size:18px;cursor:pointer;padding:0 2px;line-height:1}
+  .del:hover{color:var(--acc)}
+  pre{background:#0008;padding:12px;border-radius:8px;overflow:auto;white-space:pre-wrap}
+  code{background:#0008;padding:2px 5px;border-radius:5px}
+  .ok-banner{background:#143;border:1px solid #2a6;color:#cfe;padding:8px 12px;border-radius:10px;font-size:13px;margin:10px 0}
+  .bad-banner{background:#3a1f1f;border:1px solid #6b3a3a;color:#ffd9d9;padding:8px 12px;border-radius:10px;font-size:13px;margin:10px 0}
+  details summary{cursor:pointer;color:var(--mut);font-size:13px;margin:10px 0}
+  .filterbtns{display:flex;gap:6px;margin:10px 0}
+  .filterbtns button{flex:1;background:var(--card);border:1px solid var(--line);color:var(--txt);padding:8px;border-radius:8px;cursor:pointer;font-size:13px}
+  .filterbtns button.on{background:var(--card2);border-color:#3d4889}
+  .addrow{display:flex;gap:8px;flex-wrap:wrap;background:var(--card);border:1px dashed var(--line);border-radius:12px;padding:12px;margin:10px 0}
+  .addrow input{flex:1;min-width:140px;background:var(--bg);border:1px solid var(--line);color:var(--txt);padding:9px 11px;border-radius:8px;font-size:14px}
+  .addrow button{background:var(--ok);border:none;color:#06281c;font-weight:700;padding:9px 16px;border-radius:8px;cursor:pointer}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap" style="padding-top:0;padding-bottom:0">
+    <h1>🏁 Budapest Rally 2026 — Checklist</h1>
+    <div class="sub">11–17 juli · Brussel/Amsterdam → Boedapest · 9 landen · Nissan X-Trail + daktent</div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div id="status"></div>
+
+  <div class="me">
+    <span>Ik ben:</span>
+    <button class="chip" data-me="Dieter">Dieter</button>
+    <button class="chip" data-me="Roos">Roos</button>
+    <button class="chip" data-me="Sebastiaan">Sebastiaan</button>
+    <button class="chip" data-me="Rik">Rik</button>
+  </div>
+
+  <div class="bar"><i id="progbar"></i></div>
+  <div class="prog" id="progtxt">—</div>
+
+  <div class="addrow">
+    <input id="add-label" placeholder="Nieuw item, bv. 'Reservebril'" />
+    <input id="add-cat" list="catlist" placeholder="Categorie" />
+    <datalist id="catlist"></datalist>
+    <button id="add-btn">➕ Toevoegen</button>
+  </div>
+
+  <div class="filterbtns">
+    <button id="f-all" class="on">Alles</button>
+    <button id="f-open">Nog te doen</button>
+    <button id="f-done">Klaar</button>
+  </div>
+
+  <div id="list"></div>
+
+  <details>
+    <summary>⚙️ Setup / database-info</summary>
+    <p>Items en vinkjes staan online in Supabase (tabel <code>checklist</code>), zodat alle vier dezelfde lijst zien — inclusief toegevoegde en verwijderde items.</p>
+    <p>De tabel heeft deze kolommen nodig (eenmalig in de SQL Editor draaien):</p>
+    <pre>create table if not exists checklist (
+  item_id text primary key,
+  checked boolean default false,
+  checked_by text,
+  updated_at timestamptz default now()
+);
+alter table checklist add column if not exists category text;
+alter table checklist add column if not exists label text;
+alter table checklist add column if not exists note boolean default false;
+alter table checklist add column if not exists sort double precision default 0;
+alter table checklist enable row level security;
+drop policy if exists "open access" on checklist;
+create policy "open access" on checklist for all using (true) with check (true);
+alter publication supabase_realtime add table checklist;</pre>
+  </details>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+/* ====== Supabase config ====== */
+const SUPABASE_URL = "https://ibakhwgmnkfdxlvynyrr.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImliYWtod2dtbmtmZHhsdnlueXJyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2MTA0NTIsImV4cCI6MjA5NTE4NjQ1Mn0.tyPMdMKlf_JK7Q1FhuegZKE5rofwzIXZqW4PJBSqgas";
+/* ============================== */
+
+const PEOPLE = ["Dieter","Roos","Sebastiaan","Rik"];
+
+// Voorkeursvolgorde van categorieën
+const CAT_ORDER = ["Slapen & kamperen","Keuken & eten","Documenten & verzekering","Auto — techniek","Verplicht in auto","Vignetten & tol","Elektronica & navigatie","Veiligheid & gezondheid","Geld","Kleding","Rally-fun (= punten!)"];
+
+// Standaard-items (worden 1x in de database gezet als die nog leeg is). [id, categorie, label, extra?]
+const SEED = [
+ ["slp1","Slapen & kamperen","Daktent (montage + regenhoes gecheckt)"],
+ ["slp2","Slapen & kamperen","Tentje voor Sebastiaan & Rik (haringen, scheerlijnen)"],
+ ["slp3","Slapen & kamperen","4× slaapzak (bergpassen: 's nachts koud!)"],
+ ["slp4","Slapen & kamperen","4× slaapmat / matras daktent"],
+ ["slp5","Slapen & kamperen","Kussens + extra deken",1],
+ ["slp6","Slapen & kamperen","Campingstoelen (4×)"],
+ ["slp7","Slapen & kamperen","Inklaptafel"],
+ ["slp8","Slapen & kamperen","Tarp / luifel tegen regen & zon",1],
+ ["slp9","Slapen & kamperen","Hoofdlampen + zaklamp (4×)"],
+ ["slp10","Slapen & kamperen","Oordoppen + slaapmasker",1],
+ ["kk1","Keuken & eten","Kookstel / gasbrander + gasflessen",1],
+ ["kk2","Keuken & eten","Aansteker + lucifers",1],
+ ["kk3","Keuken & eten","Pannenset + koekenpan",1],
+ ["kk4","Keuken & eten","12V compressor-koelbox + kabel"],
+ ["kk5","Keuken & eten","Borden, bestek, bekers, mokken (4×)",1],
+ ["kk6","Keuken & eten","Scherp mes + snijplank",1],
+ ["kk7","Keuken & eten","Afwasteiltje, bio-afwasmiddel, doek, theedoek",1],
+ ["kk8","Keuken & eten","Jerrycan drinkwater (10–20L) + drinkflessen",1],
+ ["kk9","Keuken & eten","Vuilniszakken, keukenrol, vershoudfolie, alufolie",1],
+ ["kk10","Keuken & eten","Koffiezet + koffie/thee",1],
+ ["doc1","Documenten & verzekering","Paspoort/ID — alle 4"],
+ ["doc2","Documenten & verzekering","Rijbewijs Dieter (+ Roos)",1],
+ ["doc3","Documenten & verzekering","Kentekenbewijs auto",1],
+ ["doc4","Documenten & verzekering","Groene kaart / verzekeringsbewijs auto",1],
+ ["doc5","Documenten & verzekering","Pechhulp Europa-polis (ANWB o.i.d.)"],
+ ["doc6","Documenten & verzekering","Reis-/annuleringsverzekering",1],
+ ["doc7","Documenten & verzekering","EHIC / EU-zorgpas (alle 4)",1],
+ ["doc8","Documenten & verzekering","Ouderlijke toestemming + kopie ID Sebastiaan & Rik (minderjarig!)",1],
+ ["doc9","Documenten & verzekering","Contactgegevens ouders jongens + noodnummers",1],
+ ["doc10","Documenten & verzekering","Rally-roadbook gedownload/geprint",1],
+ ["au1","Auto — techniek","Olie ververst + niveau"],
+ ["au2","Auto — techniek","Banden gecontroleerd (profiel + spanning)"],
+ ["au3","Auto — techniek","Reservewiel + krik + wielsleutel aanwezig"],
+ ["au4","Auto — techniek","Accu getest"],
+ ["au5","Auto — techniek","Airco gecontroleerd (juli = heet)"],
+ ["au6","Auto — techniek","Dakdragers + gewichtslimiet daktent gecheckt"],
+ ["au7","Auto — techniek","Verlichting compleet (+ reservelampen)",1],
+ ["au8","Auto — techniek","Distributieriem-status (2008, 2500km!) — check garage",1],
+ ["au9","Auto — techniek","Koelvloeistof + ruitenwisservloeistof bijgevuld",1],
+ ["au10","Auto — techniek","Remmen gecontroleerd (Stelvio/Klausen afdalingen)",1],
+ ["au11","Auto — techniek","Reservesleutel auto meenemen",1],
+ ["vp1","Verplicht in auto","Gevarendriehoek",1],
+ ["vp2","Verplicht in auto","Veiligheidshesjes — 1 per inzittende (IT/SI/HR)",1],
+ ["vp3","Verplicht in auto","EHBO-kit (verplicht HU, AT)",1],
+ ["vp4","Verplicht in auto","Reserve-lampenset",1],
+ ["vp5","Verplicht in auto","Brandblusser (aangeraden)",1],
+ ["to1","Vignetten & tol","Zwitserland: jaarvignet ~40 CHF (verplicht!)",1],
+ ["to2","Vignetten & tol","Slovenië: e-vinjeta",1],
+ ["to3","Vignetten & tol","Hongarije: e-matrica",1],
+ ["to4","Vignetten & tol","Frankrijk + Italië: péage/autostrada",1],
+ ["el1","Elektronica & navigatie","Powerbanks (geladen)"],
+ ["el2","Elektronica & navigatie","USB-C laders + kabels"],
+ ["el3","Elektronica & navigatie","Offline kaarten (OsmAnd/Maps.me)"],
+ ["el4","Elektronica & navigatie","12V USB-splitter / autolader"],
+ ["el5","Elektronica & navigatie","Telefoonhouder auto",1],
+ ["el6","Elektronica & navigatie","EU-roaming / databundel gecheckt",1],
+ ["ge1","Veiligheid & gezondheid","Persoonlijke medicatie (alle 4)"],
+ ["ge2","Veiligheid & gezondheid","Reisapotheek: paracetamol, ORS, pleisters, anti-allergie",1],
+ ["ge3","Veiligheid & gezondheid","Zonnebrand + zonnebril + petten",1],
+ ["ge4","Veiligheid & gezondheid","Muggenspray",1],
+ ["gd1","Geld","Contant: euro's",1],
+ ["gd2","Geld","Contant: Zwitserse frank (CHF) + forint (HUF)",1],
+ ["gd3","Geld","Creditcard + pinpas (meld reis bij bank)",1],
+ ["kl1","Kleding","Regenjas"],
+ ["kl2","Kleding","Slippers"],
+ ["kl3","Kleding","Warme trui (bergpassen)"],
+ ["ra1","Rally-fun (= punten!)","Teamnaam vastgelegd",1],
+ ["ra2","Rally-fun (= punten!)","Auto-decoratie / thema (max 50 pt)",1],
+ ["ra3","Rally-fun (= punten!)","Team-outfits / verkleedkleding (max 40 pt)",1],
+ ["ra4","Rally-fun (= punten!)","Teamvlag + stickers (quick-win punten)",1],
+ ["ra5","Rally-fun (= punten!)","Rood interieur-accent (quick win)",1],
+];
+
+let me = localStorage.getItem("rally_me") || null;
+let filter = "all";
+let items = {}; // item_id -> {category,label,note,checked,checked_by,sort}
+let sb = null;
+
+const $ = s => document.querySelector(s);
+const initials = n => (n||"?")[0];
+const esc = s => (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function setMeUI(){
+  document.querySelectorAll("[data-me]").forEach(b=>b.classList.toggle("active", b.dataset.me===me));
+}
+
+function sortedCats(){
+  const present = [...new Set(Object.values(items).map(i=>i.category||"Overig"))];
+  present.sort((a,b)=>{
+    const ia=CAT_ORDER.indexOf(a), ib=CAT_ORDER.indexOf(b);
+    return (ia<0?99:ia)-(ib<0?99:ib) || a.localeCompare(b);
+  });
+  return present;
+}
+
+function render(){
+  // datalist categorieën
+  $("#catlist").innerHTML = sortedCats().map(c=>`<option value="${esc(c)}">`).join("");
+  const list = $("#list"); list.innerHTML="";
+  const all = Object.entries(items);
+  let done = all.filter(([,v])=>v.checked).length, tot = all.length;
+  for(const cat of sortedCats()){
+    let rows = all.filter(([,v])=>(v.category||"Overig")===cat);
+    rows.sort((a,b)=>(a[1].sort||0)-(b[1].sort||0));
+    const cdone = rows.filter(([,v])=>v.checked).length;
+    const visible = rows.filter(([,v])=> filter==="all" || (filter==="open"&&!v.checked) || (filter==="done"&&v.checked));
+    if(!visible.length) continue;
+    const h=document.createElement("div"); h.className="cat";
+    h.innerHTML=`<span>${esc(cat)}</span><small>${cdone}/${rows.length}</small>`;
+    list.appendChild(h);
+    for(const [id,v] of visible){
+      const el=document.createElement("div");
+      el.className="item"+(v.checked?" done":"");
+      el.innerHTML=`
+        <div class="box" data-toggle="${id}">${v.checked?"✓":""}</div>
+        <div class="label" data-toggle="${id}"><b>${esc(v.label)}</b>${v.note?'<span class="tag">extra</span>':''}
+          ${v.checked&&v.checked_by?`<span class="by"><span class="av ${v.checked_by}">${initials(v.checked_by)}</span> ${esc(v.checked_by)}</span>`:''}
+        </div>
+        <button class="del" data-del="${id}" title="Verwijderen">✕</button>`;
+      list.appendChild(el);
+    }
+  }
+  const pct = tot?Math.round(done/tot*100):0;
+  $("#progbar").style.width = pct+"%";
+  $("#progtxt").textContent = `${done} / ${tot} klaar (${pct}%)`;
+}
+
+async function toggle(id){
+  if(!me){ alert("Kies eerst bovenaan wie je bent."); return; }
+  const v = items[id]; if(!v) return;
+  const next = !v.checked;
+  v.checked=next; v.checked_by = next?me:null;
+  render();
+  if(sb){
+    const {error}=await sb.from("checklist").update({checked:next,checked_by:next?me:null,updated_at:new Date().toISOString()}).eq("item_id",id);
+    if(error) banner("⚠️ Opslaan mislukt: "+error.message,true);
+  }
+}
+
+async function addItem(){
+  const label=$("#add-label").value.trim();
+  let cat=$("#add-cat").value.trim()||"Overig";
+  if(!label){ $("#add-label").focus(); return; }
+  const id = "u"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  const maxSort = Math.max(0,...Object.values(items).filter(i=>i.category===cat).map(i=>i.sort||0));
+  const row={item_id:id,category:cat,label,note:false,checked:false,checked_by:null,sort:maxSort+10};
+  items[id]={category:cat,label,note:false,checked:false,checked_by:null,sort:row.sort};
+  $("#add-label").value=""; render();
+  if(sb){
+    const {error}=await sb.from("checklist").insert(row);
+    if(error) banner("⚠️ Toevoegen mislukt: "+error.message,true);
+  }
+}
+
+async function delItem(id){
+  const v=items[id]; if(!v) return;
+  if(!confirm(`"${v.label}" verwijderen voor het hele team?`)) return;
+  delete items[id]; render();
+  if(sb){
+    const {error}=await sb.from("checklist").delete().eq("item_id",id);
+    if(error) banner("⚠️ Verwijderen mislukt: "+error.message,true);
+  }
+}
+
+function banner(msg,bad){ $("#status").innerHTML=`<div class="${bad?'bad-banner':'ok-banner'}">${msg}</div>`; }
+
+async function seedIfEmpty(){
+  const seedRows = SEED.map((s,idx)=>({item_id:s[0],category:s[1],label:s[2],note:!!s[3],checked:false,checked_by:null,sort:idx*10}));
+  const {error}=await sb.from("checklist").upsert(seedRows,{onConflict:"item_id",ignoreDuplicates:true});
+  if(error) banner("⚠️ Standaardlijst plaatsen mislukt: "+error.message,true);
+}
+
+async function loadAll(){
+  let {data,error}=await sb.from("checklist").select("*");
+  if(error){ banner("⚠️ Verbinden mislukt: "+error.message,true); return; }
+  if(!data.length){ await seedIfEmpty(); ({data,error}=await sb.from("checklist").select("*")); }
+  items={};
+  for(const r of data) items[r.item_id]={category:r.category||"Overig",label:r.label||r.item_id,note:!!r.note,checked:!!r.checked,checked_by:r.checked_by,sort:r.sort||0};
+  render();
+}
+
+function initRealtime(){
+  sb.channel("checklist-rt").on("postgres_changes",{event:"*",schema:"public",table:"checklist"},p=>{
+    if(p.eventType==="DELETE"){ if(p.old&&p.old.item_id) delete items[p.old.item_id]; }
+    else { const r=p.new; if(r&&r.item_id) items[r.item_id]={category:r.category||"Overig",label:r.label||r.item_id,note:!!r.note,checked:!!r.checked,checked_by:r.checked_by,sort:r.sort||0}; }
+    render();
+  }).subscribe();
+}
+
+// events
+document.querySelectorAll("[data-me]").forEach(b=>{ b.onclick=()=>{ me=b.dataset.me; localStorage.setItem("rally_me",me); setMeUI(); }; });
+$("#add-btn").onclick=addItem;
+$("#add-label").addEventListener("keydown",e=>{ if(e.key==="Enter") addItem(); });
+$("#list").addEventListener("click",e=>{
+  const t=e.target.closest("[data-toggle]"); const d=e.target.closest("[data-del]");
+  if(d){ delItem(d.dataset.del); return; }
+  if(t){ toggle(t.dataset.toggle); }
+});
+$("#f-all").onclick=()=>{filter="all";setFilterUI();render();};
+$("#f-open").onclick=()=>{filter="open";setFilterUI();render();};
+$("#f-done").onclick=()=>{filter="done";setFilterUI();render();};
+function setFilterUI(){ $("#f-all").classList.toggle("on",filter==="all"); $("#f-open").classList.toggle("on",filter==="open"); $("#f-done").classList.toggle("on",filter==="done"); }
+
+setMeUI(); render();
+if(SUPABASE_URL.includes("VUL_IN")||SUPABASE_KEY.includes("VUL_IN")){
+  banner("⚠️ Nog niet gekoppeld aan Supabase — zie ⚙️ setup.",true);
+}else{
+  sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+  loadAll(); initRealtime();
+  banner("✅ Online verbonden — lijst en vinkjes worden live gedeeld met het team.");
+}
+</script>
+</body>
+</html>
