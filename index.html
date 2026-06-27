@@ -380,7 +380,18 @@ details.card .collapsible-body{padding:0 16px 16px}
       </div>
     </details>
 
-    <details class="card collapsible">
+    <div class="search field" style="margin-bottom:10px">
+      <input id="clSearch" placeholder="🔍 Zoeken in checklist…" autocomplete="off">
+    </div>
+    <div class="filters">
+      <button class="chip active" data-filter="all">Alles</button>
+      <button class="chip" data-filter="todo">Nog te doen</button>
+      <button class="chip" data-filter="done">Klaar</button>
+    </div>
+
+    <div id="clList"></div>
+
+    <details class="card collapsible" style="margin-top:22px">
       <summary><span>🧑‍🤝‍🧑 Deelnemers beheren</span><span class="chev">▸</span></summary>
       <div class="collapsible-body">
         <p class="note" style="margin-top:0;margin-bottom:10px">Beheer wie er meedoen. Deelnemers verschijnen bij "Wie ben jij?" en als keuze bij "Voor wie" op elk item.</p>
@@ -403,17 +414,6 @@ details.card .collapsible-body{padding:0 16px 16px}
         <div id="sponsorChips" style="display:flex;flex-wrap:wrap;gap:7px;margin-top:12px"></div>
       </div>
     </details>
-
-    <div class="search field" style="margin-bottom:10px">
-      <input id="clSearch" placeholder="🔍 Zoeken in checklist…" autocomplete="off">
-    </div>
-    <div class="filters">
-      <button class="chip active" data-filter="all">Alles</button>
-      <button class="chip" data-filter="todo">Nog te doen</button>
-      <button class="chip" data-filter="done">Klaar</button>
-    </div>
-
-    <div id="clList"></div>
   </section>
 
   <!-- ============ LEENLIJST ============ -->
