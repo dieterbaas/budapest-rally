@@ -1,322 +1,1006 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Budapest Rally 2026 — Checklist</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#b3261e">
+<title>Budapest Rally 2026 🏁</title>
+
+<!--
+=====================================================================
+  SUPABASE SETUP-SQL (idempotent — voer 1x uit in de SQL Editor)
+  Project ref: ibakhwgmnkfdxlvynyrr
+=====================================================================
+-- DEEL 1: checklist — lenen / sponsor / per persoon
+alter table checklist add column if not exists voor_wie text;
+alter table checklist add column if not exists geleend_van text;
+alter table checklist add column if not exists sponsor text;
+
+-- Uitleners (mensen van wie we lenen) — aanmaken + selecteren per item
+create table if not exists uitleners (
+  id uuid primary key default gen_random_uuid(),
+  naam text not null unique,
+  created_at timestamptz default now()
+);
+alter table uitleners enable row level security;
+drop policy if exists "uitleners open" on uitleners;
+create policy "uitleners open" on uitleners for all using (true) with check (true);
+
+-- DEEL 2: reisverslag + foto's
+create extension if not exists pgcrypto;
+
+create table if not exists posts (
+  id uuid primary key default gen_random_uuid(),
+  dag date not null default current_date,
+  titel text,
+  verslag text,
+  auteur text,
+  created_at timestamptz default now()
+);
+
+create table if not exists fotos (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid references posts(id) on delete set null,
+  pad text not null,
+  bijschrift text,
+  geupload_door text,
+  created_at timestamptz default now()
+);
+
+alter table posts enable row level security;
+alter table fotos enable row level security;
+
+-- Postgres ondersteunt geen "create policy if not exists": eerst droppen.
+drop policy if exists "posts open" on posts;
+create policy "posts open" on posts for all using (true) with check (true);
+drop policy if exists "fotos open" on fotos;
+create policy "fotos open" on fotos for all using (true) with check (true);
+
+-- Storage — publieke bucket voor de foto's
+insert into storage.buckets (id, name, public) values ('rally-fotos','rally-fotos', true)
+on conflict (id) do nothing;
+drop policy if exists "rally-fotos read"   on storage.objects;
+create policy "rally-fotos read"   on storage.objects for select using (bucket_id = 'rally-fotos');
+drop policy if exists "rally-fotos upload" on storage.objects;
+create policy "rally-fotos upload" on storage.objects for insert with check (bucket_id = 'rally-fotos');
+=====================================================================
+-->
+
 <style>
-  :root{
-    --bg:#0f1226; --card:#1a1f3d; --card2:#232a52; --line:#2e3766;
-    --txt:#eef1ff; --mut:#9aa3d4; --acc:#ff5a5f; --ok:#3ddc97; --warn:#ffcf5c;
-    --d:#5b8cff; --r:#ff7eb6; --s:#ffb454; --k:#54e0c7;
-  }
-  *{box-sizing:border-box}
-  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt);}
-  header{padding:18px 16px;background:linear-gradient(135deg,#1a1f3d,#2a1f4d);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5;}
-  h1{margin:0;font-size:20px;}
-  .sub{color:var(--mut);font-size:13px;margin-top:4px}
-  .wrap{max-width:860px;margin:0 auto;padding:16px;}
-  .me{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:14px 0}
-  .me span{color:var(--mut);font-size:13px}
-  .chip{border:1px solid var(--line);background:var(--card);color:var(--txt);padding:7px 12px;border-radius:999px;cursor:pointer;font-size:14px}
-  .chip.active{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
-  .bar{height:10px;background:var(--card2);border-radius:999px;overflow:hidden;margin:10px 0 4px}
-  .bar > i{display:block;height:100%;background:linear-gradient(90deg,var(--ok),#2bb0ff);width:0;transition:width .3s}
-  .prog{font-size:13px;color:var(--mut)}
-  .cat{margin:20px 0 8px;font-size:15px;font-weight:700;display:flex;justify-content:space-between;align-items:center}
-  .cat small{color:var(--mut);font-weight:500}
-  .item{display:flex;gap:12px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px;transition:.15s}
-  .item:hover{border-color:#3d4889}
-  .item.done{background:var(--card2);border-color:#2a5a45}
-  .box{width:22px;height:22px;border-radius:6px;border:2px solid var(--line);flex:none;margin-top:1px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff;cursor:pointer}
-  .item.done .box{background:var(--ok);border-color:var(--ok)}
-  .label{flex:1;cursor:pointer}
-  .label b{font-weight:600}
-  .tag{font-size:10px;text-transform:uppercase;letter-spacing:.5px;padding:2px 6px;border-radius:5px;background:#3a2a55;color:var(--warn);margin-left:6px;vertical-align:middle}
-  .by{font-size:12px;color:var(--mut);white-space:nowrap;margin-top:3px;display:block}
-  .av{display:inline-flex;width:20px;height:20px;border-radius:50%;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#0b0e1f}
-  .Dieter{background:var(--d)} .Roos{background:var(--r)} .Sebastiaan{background:var(--s)} .Rik{background:var(--k)}
-  .del{flex:none;background:none;border:none;color:#6b73a8;font-size:18px;cursor:pointer;padding:0 2px;line-height:1}
-  .del:hover{color:var(--acc)}
-  pre{background:#0008;padding:12px;border-radius:8px;overflow:auto;white-space:pre-wrap}
-  code{background:#0008;padding:2px 5px;border-radius:5px}
-  .ok-banner{background:#143;border:1px solid #2a6;color:#cfe;padding:8px 12px;border-radius:10px;font-size:13px;margin:10px 0}
-  .bad-banner{background:#3a1f1f;border:1px solid #6b3a3a;color:#ffd9d9;padding:8px 12px;border-radius:10px;font-size:13px;margin:10px 0}
-  details summary{cursor:pointer;color:var(--mut);font-size:13px;margin:10px 0}
-  .filterbtns{display:flex;gap:6px;margin:10px 0}
-  .filterbtns button{flex:1;background:var(--card);border:1px solid var(--line);color:var(--txt);padding:8px;border-radius:8px;cursor:pointer;font-size:13px}
-  .filterbtns button.on{background:var(--card2);border-color:#3d4889}
-  .addrow{display:flex;gap:8px;flex-wrap:wrap;background:var(--card);border:1px dashed var(--line);border-radius:12px;padding:12px;margin:10px 0}
-  .addrow input{flex:1;min-width:140px;background:var(--bg);border:1px solid var(--line);color:var(--txt);padding:9px 11px;border-radius:8px;font-size:14px}
-  .addrow button{background:var(--ok);border:none;color:#06281c;font-weight:700;padding:9px 16px;border-radius:8px;cursor:pointer}
+:root{
+  --rood:#b3261e; --rood-dark:#7f1610; --rood-licht:#fdecea;
+  --groen:#2e7d32; --groen-licht:#e8f5e9;
+  --geel:#f9a825; --blauw:#1565c0;
+  --inkt:#23211f; --grijs:#f4f2ee; --kaart:#ffffff;
+  --border:#e2ddd5; --muted:#8a8378;
+  --font:'Segoe UI',system-ui,-apple-system,sans-serif;
+  --schaduw:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html{scroll-behavior:smooth}
+body{font-family:var(--font);background:var(--grijs);color:var(--inkt);line-height:1.45}
+
+/* ---------- Header ---------- */
+header{
+  background:linear-gradient(135deg,var(--rood-dark),var(--rood));
+  color:#fff;padding:calc(env(safe-area-inset-top) + 14px) 16px 14px;
+  position:sticky;top:0;z-index:30;box-shadow:0 2px 8px rgba(0,0,0,.18)
+}
+.head-row{display:flex;align-items:center;justify-content:space-between;gap:10px;max-width:1100px;margin:0 auto}
+header h1{font-size:1.15rem;font-weight:800;letter-spacing:.3px;display:flex;align-items:center;gap:8px}
+header .sub{opacity:.85;font-size:.72rem;font-weight:500}
+.whoami{
+  background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.25);
+  color:#fff;border-radius:999px;padding:6px 12px;font-size:.78rem;font-weight:600;
+  cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap
+}
+.whoami:hover{background:rgba(255,255,255,.26)}
+
+/* ---------- Tabs ---------- */
+.tabbar{
+  position:sticky;top:0;z-index:20;background:var(--kaart);border-bottom:1px solid var(--border);
+  display:flex;max-width:1100px;margin:0 auto
+}
+.tabbar.stuck{top:0}
+.tab{
+  flex:1;padding:13px 8px;background:none;border:none;border-bottom:3px solid transparent;
+  font-size:.92rem;font-weight:700;color:var(--muted);cursor:pointer;font-family:var(--font);
+  display:flex;align-items:center;justify-content:center;gap:7px;transition:.15s
+}
+.tab.active{color:var(--rood);border-bottom-color:var(--rood)}
+.tab .cnt{font-size:.72rem;background:var(--rood-licht);color:var(--rood);border-radius:999px;padding:1px 7px;font-weight:800}
+
+.wrap{max-width:1100px;margin:0 auto;padding:14px 14px 60px}
+.panel{display:none}
+.panel.active{display:block;animation:fade .2s}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+/* ---------- Buttons ---------- */
+.btn{
+  padding:10px 16px;border:none;border-radius:10px;font-size:.88rem;font-weight:700;
+  cursor:pointer;font-family:var(--font);transition:.15s;display:inline-flex;
+  align-items:center;justify-content:center;gap:7px;min-height:42px
+}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:var(--rood);color:#fff}
+.btn-primary:hover{background:var(--rood-dark)}
+.btn-ghost{background:var(--grijs);color:var(--inkt);border:1px solid var(--border)}
+.btn-ghost:hover{background:#ece8e1}
+.btn-sm{padding:6px 10px;font-size:.78rem;min-height:34px;border-radius:8px}
+.btn[disabled]{opacity:.55;cursor:not-allowed;transform:none}
+.icon-btn{
+  background:none;border:none;cursor:pointer;font-size:1rem;padding:6px;border-radius:8px;
+  color:var(--muted);line-height:1
+}
+.icon-btn:hover{background:var(--grijs);color:var(--inkt)}
+
+/* ---------- Card / form ---------- */
+.card{background:var(--kaart);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--schaduw);margin-bottom:14px}
+.card h2{font-size:1rem;font-weight:800;margin-bottom:12px;display:flex;align-items:center;gap:8px;color:var(--rood-dark)}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:11px}
+.field label{font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.field input,.field textarea,.field select{
+  width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:10px;
+  font-size:1rem;font-family:var(--font);background:#fff;color:var(--inkt)
+}
+.field input:focus,.field textarea:focus,.field select:focus{
+  outline:none;border-color:var(--rood);box-shadow:0 0 0 3px var(--rood-licht)
+}
+.field textarea{resize:vertical;min-height:90px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:11px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+@media(max-width:640px){.grid3,.grid2{grid-template-columns:1fr}}
+
+/* ---------- Filters ---------- */
+.filters{display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap}
+.chip{
+  padding:8px 15px;border:1px solid var(--border);background:var(--kaart);border-radius:999px;
+  font-size:.82rem;font-weight:700;color:var(--muted);cursor:pointer;transition:.15s
+}
+.chip.active{background:var(--rood);color:#fff;border-color:var(--rood)}
+.search{margin-bottom:12px}
+
+/* ---------- Checklist ---------- */
+.cat{margin-bottom:18px}
+.cat-head{display:flex;align-items:center;gap:8px;margin:0 2px 8px;font-size:.95rem;font-weight:800;color:var(--inkt)}
+.cat-toggle{flex:0 0 auto;white-space:nowrap}
+.cat-head .cat-cnt{font-size:.74rem;font-weight:700;color:var(--muted)}
+.item{
+  display:flex;align-items:flex-start;gap:11px;background:var(--kaart);border:1px solid var(--border);
+  border-radius:12px;padding:11px 12px;margin-bottom:7px;box-shadow:var(--schaduw);transition:.12s
+}
+.item.done{background:#fafdfb;border-color:#cfe8d3}
+.item.done .item-label{text-decoration:line-through;color:var(--muted)}
+.check{
+  appearance:none;-webkit-appearance:none;width:26px;height:26px;flex:0 0 26px;margin-top:1px;
+  border:2px solid var(--border);border-radius:8px;cursor:pointer;position:relative;background:#fff;transition:.12s
+}
+.check:checked{background:var(--groen);border-color:var(--groen)}
+.check:checked::after{content:"✓";position:absolute;inset:0;color:#fff;font-weight:900;font-size:1rem;display:flex;align-items:center;justify-content:center}
+.item-body{flex:1;min-width:0}
+.item-label{font-size:.95rem;font-weight:600;word-break:break-word}
+.item-meta{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}
+.tag{font-size:.72rem;font-weight:700;padding:2px 9px;border-radius:999px;white-space:nowrap}
+.tag-wie{background:#e3f2fd;color:#1565c0}
+.tag-leen{background:#fff3e0;color:#e65100}
+.tag-spon{background:#f3e5f5;color:#7b1fa2}
+.tag-by{background:var(--groen-licht);color:var(--groen);font-weight:600}
+.item-actions{display:flex;gap:2px;flex:0 0 auto}
+
+/* ---------- Reisverslag feed ---------- */
+.dag{margin-bottom:24px}
+.dag-head{
+  position:sticky;top:50px;z-index:5;background:var(--grijs);padding:6px 2px;margin-bottom:8px;
+  font-size:.78rem;font-weight:800;color:var(--rood);text-transform:uppercase;letter-spacing:.6px
+}
+.post{background:var(--kaart);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--schaduw);margin-bottom:12px}
+.post h3{font-size:1.1rem;font-weight:800;margin-bottom:4px}
+.post .by{font-size:.76rem;color:var(--muted);margin-bottom:10px}
+.post .verslag{font-size:.95rem;white-space:pre-wrap;word-break:break-word;margin-bottom:12px}
+.fotogrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:7px}
+.fotogrid figure{margin:0;border-radius:10px;overflow:hidden;background:#eee;position:relative;cursor:zoom-in}
+.fotogrid img{width:100%;height:120px;object-fit:cover;display:block;transition:.2s}
+.fotogrid figure:hover img{transform:scale(1.05)}
+.fotogrid figcaption{
+  position:absolute;left:0;right:0;bottom:0;background:linear-gradient(transparent,rgba(0,0,0,.65));
+  color:#fff;font-size:.72rem;padding:14px 7px 5px;line-height:1.2
+}
+
+/* losse foto's zonder post */
+.losse-fotos .fotogrid{margin-top:4px}
+
+/* ---------- Upload rows ---------- */
+.up-row{display:flex;align-items:center;gap:10px;padding:8px;border:1px solid var(--border);border-radius:10px;margin-bottom:7px;background:#fff}
+.up-thumb{width:52px;height:52px;border-radius:8px;object-fit:cover;flex:0 0 52px;background:#eee}
+.up-row .grow{flex:1;min-width:0}
+.up-row input{padding:8px 10px;font-size:.85rem}
+.up-status{font-size:.74rem;font-weight:700;white-space:nowrap}
+.up-status.wait{color:var(--muted)}
+.up-status.busy{color:var(--blauw)}
+.up-status.ok{color:var(--groen)}
+.up-status.err{color:var(--rood)}
+.progress{height:5px;background:var(--grijs);border-radius:99px;overflow:hidden;margin-top:5px}
+.progress>span{display:block;height:100%;width:0;background:var(--rood);transition:width .3s}
+
+/* ---------- Empty / loading ---------- */
+.empty{text-align:center;padding:42px 18px;color:var(--muted)}
+.empty .big{font-size:2.4rem;margin-bottom:8px}
+.skeleton{height:60px;border-radius:12px;background:linear-gradient(90deg,#eee,#f6f6f6,#eee);background-size:200% 100%;animation:sk 1.2s infinite;margin-bottom:7px}
+@keyframes sk{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* ---------- Toast ---------- */
+#toast{
+  position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 18px);transform:translateX(-50%) translateY(20px);
+  background:var(--inkt);color:#fff;padding:11px 18px;border-radius:999px;font-size:.85rem;font-weight:600;
+  box-shadow:0 6px 20px rgba(0,0,0,.3);opacity:0;pointer-events:none;transition:.25s;z-index:200;max-width:90vw;text-align:center
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.err{background:var(--rood)}
+
+/* ---------- Modal ---------- */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;align-items:flex-end;justify-content:center;padding:0}
+.modal-bg.show{display:flex}
+.modal{background:#fff;border-radius:18px 18px 0 0;padding:20px;width:100%;max-width:520px;box-shadow:0 -8px 32px rgba(0,0,0,.25);max-height:92vh;overflow-y:auto;animation:slideUp .22s}
+@media(min-width:560px){.modal-bg{align-items:center}.modal{border-radius:18px}}
+@keyframes slideUp{from{transform:translateY(40px);opacity:.6}to{transform:none;opacity:1}}
+.modal h3{margin-bottom:14px;color:var(--rood-dark);font-size:1.05rem}
+
+/* ---------- Lightbox ---------- */
+#lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:300;align-items:center;justify-content:center;flex-direction:column;padding:16px}
+#lightbox.show{display:flex}
+#lightbox img{max-width:100%;max-height:82vh;border-radius:8px;object-fit:contain}
+#lightbox .cap{color:#fff;margin-top:12px;font-size:.9rem;text-align:center;max-width:600px}
+#lightbox .close{position:absolute;top:calc(env(safe-area-inset-top) + 10px);right:14px;color:#fff;font-size:2rem;background:none;border:none;cursor:pointer;line-height:1}
+#lightbox .nav{position:absolute;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);color:#fff;border:none;font-size:2rem;width:48px;height:64px;cursor:pointer;border-radius:10px}
+#lightbox .nav.prev{left:8px}#lightbox .nav.next{right:8px}
+
+.lener-chip{display:inline-flex;align-items:center;gap:6px;background:#fff3e0;color:#e65100;border:1px solid #ffcc80;border-radius:999px;padding:6px 8px 6px 13px;font-size:.85rem;font-weight:700}
+.lener-chip button{background:none;border:none;color:#e65100;cursor:pointer;font-size:1rem;line-height:1;padding:2px 4px;border-radius:50%}
+.lener-chip button:hover{background:#ffe0b2}
+.note{font-size:.8rem;color:var(--muted);margin-top:6px}
+.banner{background:#fff8e1;border:1px solid #ffe082;color:#7c5d00;padding:10px 12px;border-radius:10px;font-size:.83rem;margin-bottom:12px;display:none}
+.banner.show{display:block}
 </style>
 </head>
 <body>
+
 <header>
-  <div class="wrap" style="padding-top:0;padding-bottom:0">
-    <h1>🏁 Budapest Rally 2026 — Checklist</h1>
-    <div class="sub">11–17 juli · Brussel/Amsterdam → Boedapest · 9 landen · Nissan X-Trail + daktent</div>
+  <div class="head-row">
+    <div>
+      <h1>🏁 Budapest Rally 2026</h1>
+      <div class="sub">Checklist &amp; reisverslag</div>
+    </div>
+    <button class="whoami" id="whoami">👤 <span id="whoamiName">…</span></button>
   </div>
 </header>
 
+<nav class="tabbar">
+  <button class="tab active" data-tab="checklist">✅ Checklist <span class="cnt" id="tabCnt">0/0</span></button>
+  <button class="tab" data-tab="leenlijst">🤝 Leenlijst <span class="cnt" id="leenCnt">0</span></button>
+  <button class="tab" data-tab="reisverslag">📸 Reisverslag</button>
+</nav>
+
 <div class="wrap">
-  <div id="status"></div>
 
-  <div class="bar"><i id="progbar"></i></div>
-  <div class="prog" id="progtxt">—</div>
+  <!-- ============ CHECKLIST ============ -->
+  <section class="panel active" id="panel-checklist">
+    <div class="card">
+      <h2>➕ Item toevoegen</h2>
+      <div class="field">
+        <label for="nLabel">Wat</label>
+        <input id="nLabel" placeholder="bv. Reserveband + krik" autocomplete="off">
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label for="nCat">Categorie</label>
+          <input id="nCat" list="catList" placeholder="bv. Auto &amp; gereedschap" autocomplete="off">
+          <datalist id="catList"></datalist>
+        </div>
+        <div class="field">
+          <label for="nAantal">Aantal</label>
+          <input id="nAantal" type="number" min="1" max="50" step="1" value="1" inputmode="numeric">
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label for="nWie">👤 Voor wie <span style="font-weight:500;text-transform:none">(optie)</span></label>
+          <input id="nWie" placeholder="bv. Rik" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="nLeen">🤝 Geleend van <span style="font-weight:500;text-transform:none">(optie)</span></label>
+          <input id="nLeen" list="leenNames" placeholder="kies of typ een naam" autocomplete="off">
+          <datalist id="leenNames"></datalist>
+        </div>
+      </div>
+      <div class="field">
+        <label for="nSpon">💶 Sponsor <span style="font-weight:500;text-transform:none">(optie)</span></label>
+        <input id="nSpon" placeholder="bv. Garage Bos" autocomplete="off">
+      </div>
+      <p class="note" style="margin-top:-4px;margin-bottom:10px">Bij een aantal groter dan 1 worden er net zoveel losse items aangemaakt (bv. <em>(1/4)</em> … <em>(4/4)</em>), elk apart af te vinken en per stuk te koppelen aan wie je 'm van leent.</p>
+      <button class="btn btn-primary" id="addBtn" style="width:100%">➕ Toevoegen</button>
+    </div>
 
-  <div class="addrow">
-    <input id="add-label" placeholder="Nieuw item, bv. 'Reservebril'" />
-    <input id="add-cat" list="catlist" placeholder="Categorie" />
-    <datalist id="catlist"></datalist>
-    <button id="add-btn">➕ Toevoegen</button>
-  </div>
+    <div class="search field" style="margin-bottom:10px">
+      <input id="clSearch" placeholder="🔍 Zoeken in checklist…" autocomplete="off">
+    </div>
+    <div class="filters">
+      <button class="chip active" data-filter="all">Alles</button>
+      <button class="chip" data-filter="todo">Nog te doen</button>
+      <button class="chip" data-filter="done">Klaar</button>
+    </div>
 
-  <div class="filterbtns">
-    <button id="f-all" class="on">Alles</button>
-    <button id="f-open">Nog te doen</button>
-    <button id="f-done">Klaar</button>
-  </div>
+    <div id="clList"></div>
+  </section>
 
-  <div id="list"></div>
+  <!-- ============ LEENLIJST ============ -->
+  <section class="panel" id="panel-leenlijst">
+    <div class="card">
+      <h2>👥 Uitleners beheren</h2>
+      <p class="note" style="margin-top:0;margin-bottom:10px">Maak hier de mensen aan van wie je leent. Ze verschijnen dan als keuze bij "Geleend van" op elk item.</p>
+      <div style="display:flex;gap:8px">
+        <input id="newLener" placeholder="Naam, bv. buurman Jan" autocomplete="off" style="flex:1;padding:11px 12px;border:1px solid var(--border);border-radius:10px;font-size:1rem;font-family:var(--font)">
+        <button class="btn btn-primary" id="addLenerBtn" style="flex:0 0 auto">➕ Toevoegen</button>
+      </div>
+      <div id="lenerChips" style="display:flex;flex-wrap:wrap;gap:7px;margin-top:12px"></div>
+    </div>
+    <div class="card" style="background:var(--rood-licht);border-color:#f3c9c5">
+      <h2>🤝 Geleende spullen — per persoon</h2>
+      <p class="note" style="margin-top:0">Alles wat je van iemand leent, gegroepeerd per uitlener. Handig om na de rally alles makkelijk terug te geven. Tik <strong>↩︎ teruggegeven</strong> zodra je iets hebt teruggebracht — dan verdwijnt het uit de lijst.</p>
+    </div>
+    <div class="search field" style="margin-bottom:10px">
+      <input id="leenSearch" placeholder="🔍 Zoeken in leenlijst…" autocomplete="off">
+    </div>
+    <div id="leenList"></div>
+  </section>
 
-  <details>
-    <summary>⚙️ Setup / database-info</summary>
-    <p>Items en vinkjes staan online in Supabase (tabel <code>checklist</code>), zodat alle vier dezelfde lijst zien — inclusief toegevoegde en verwijderde items.</p>
-    <p>De tabel heeft deze kolommen nodig (eenmalig in de SQL Editor draaien):</p>
-    <pre>create table if not exists checklist (
-  item_id text primary key,
-  checked boolean default false,
-  checked_by text,
-  updated_at timestamptz default now()
-);
-alter table checklist add column if not exists category text;
-alter table checklist add column if not exists label text;
-alter table checklist add column if not exists note boolean default false;
-alter table checklist add column if not exists sort double precision default 0;
-alter table checklist enable row level security;
-drop policy if exists "open access" on checklist;
-create policy "open access" on checklist for all using (true) with check (true);
-alter publication supabase_realtime add table checklist;</pre>
-  </details>
+  <!-- ============ REISVERSLAG ============ -->
+  <section class="panel" id="panel-reisverslag">
+    <div class="card">
+      <h2>✍️ Nieuw dagverslag</h2>
+      <div class="grid2">
+        <div class="field">
+          <label for="pDag">Datum</label>
+          <input id="pDag" type="date">
+        </div>
+        <div class="field">
+          <label for="pTitel">Titel <span style="font-weight:500;text-transform:none">(optie)</span></label>
+          <input id="pTitel" placeholder="bv. Dag 3 — bergpassen" autocomplete="off">
+        </div>
+      </div>
+      <div class="field">
+        <label for="pVerslag">Verslag</label>
+        <textarea id="pVerslag" placeholder="Hoe was de dag?"></textarea>
+      </div>
+      <div class="field">
+        <label>📷 Foto's <span style="font-weight:500;text-transform:none">(meerdere mag — worden verkleind)</span></label>
+        <input id="pFotos" type="file" accept="image/*" multiple>
+      </div>
+      <div id="upList"></div>
+      <button class="btn btn-primary" id="postBtn" style="width:100%;margin-top:6px">📤 Plaatsen</button>
+      <p class="note">Foto's worden op je telefoon verkleind (max 1600px, JPEG) vóór ze geüpload worden — scheelt dataverbruik onderweg.</p>
+    </div>
+
+    <div class="banner" id="feedBanner"></div>
+    <div id="feed"></div>
+  </section>
+
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Modals -->
+<div class="modal-bg" id="whoModal">
+  <div class="modal">
+    <h3>👤 Wie ben jij?</h3>
+    <div class="field">
+      <label for="whoInput">Je naam</label>
+      <input id="whoInput" placeholder="bv. Sebastiaan" autocomplete="off">
+    </div>
+    <p class="note" style="margin-bottom:12px">Zo zien we wie wat afvinkt en wie verslagen plaatst.</p>
+    <button class="btn btn-primary" id="whoSave" style="width:100%">Opslaan</button>
+  </div>
+</div>
+
+<div class="modal-bg" id="editModal">
+  <div class="modal">
+    <h3>✏️ Item bewerken</h3>
+    <input type="hidden" id="eId">
+    <div class="field"><label for="eLabel">Wat</label><input id="eLabel" autocomplete="off"></div>
+    <div class="field"><label for="eCat">Categorie</label><input id="eCat" list="catList" autocomplete="off"></div>
+    <div class="grid2">
+      <div class="field"><label for="eWie">👤 Voor wie</label><input id="eWie" autocomplete="off"></div>
+      <div class="field"><label for="eLeen">🤝 Geleend van</label><input id="eLeen" list="leenNames" autocomplete="off"></div>
+    </div>
+    <div class="field"><label for="eSpon">💶 Sponsor</label><input id="eSpon" autocomplete="off"></div>
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <button class="btn btn-ghost" id="eDelete" style="flex:0 0 auto">🗑️</button>
+      <button class="btn btn-ghost" id="eCancel" style="flex:1">Annuleren</button>
+      <button class="btn btn-primary" id="eSave" style="flex:1">Opslaan</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="dupModal">
+  <div class="modal">
+    <h3>👥 Dupliceer voor andere persoon</h3>
+    <input type="hidden" id="dId">
+    <p class="note" style="margin-bottom:10px">Maakt een kopie van dit item, gekoppeld aan een andere persoon. Handig als iedereen z'n eigen exemplaar nodig heeft.</p>
+    <div class="field"><label for="dWie">👤 Voor wie</label><input id="dWie" placeholder="bv. Sebastiaan" autocomplete="off"></div>
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <button class="btn btn-ghost" id="dCancel" style="flex:1">Annuleren</button>
+      <button class="btn btn-primary" id="dSave" style="flex:1">Dupliceren</button>
+    </div>
+  </div>
+</div>
+
+<div id="lightbox">
+  <button class="close" id="lbClose">✕</button>
+  <button class="nav prev" id="lbPrev">‹</button>
+  <img id="lbImg" alt="">
+  <button class="nav next" id="lbNext">›</button>
+  <div class="cap" id="lbCap"></div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
-/* ====== Supabase config ====== */
-const SUPABASE_URL = "https://ibakhwgmnkfdxlvynyrr.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImliYWtod2dtbmtmZHhsdnlueXJyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2MTA0NTIsImV4cCI6MjA5NTE4NjQ1Mn0.tyPMdMKlf_JK7Q1FhuegZKE5rofwzIXZqW4PJBSqgas";
-/* ============================== */
+/* ============================================================
+   Budapest Rally 2026 — checklist + reisverslag
+   Backend: Supabase (project ibakhwgmnkfdxlvynyrr)
+   ============================================================ */
+const SUPABASE_URL  = 'https://ibakhwgmnkfdxlvynyrr.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImliYWtod2dtbmtmZHhsdnlueXJyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2MTA0NTIsImV4cCI6MjA5NTE4NjQ1Mn0.tyPMdMKlf_JK7Q1FhuegZKE5rofwzIXZqW4PJBSqgas';
+const BUCKET = 'rally-fotos';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
-const PEOPLE = ["Dieter","Roos","Sebastiaan","Rik"];
+/* ---------- helpers ---------- */
+const $  = (s,r=document)=>r.querySelector(s);
+const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
+const esc = s => (s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function toast(msg,isErr){const t=$('#toast');t.textContent=msg;t.className=isErr?'err show':'show';clearTimeout(t._t);t._t=setTimeout(()=>t.className='',3000);}
+const DIACRITICS=new RegExp('['+String.fromCharCode(0x0300)+'-'+String.fromCharCode(0x036f)+']','g');
+function slug(s){return (s||'').toString().toLowerCase().normalize('NFD').replace(DIACRITICS,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40) || 'x';}
+function randId(){return Math.random().toString(36).slice(2,12);}
+const fmtDag = d => { try{ return new Date(d+'T00:00:00').toLocaleDateString('nl-NL',{weekday:'long',day:'numeric',month:'long'});}catch(e){return d;} };
 
-// Voorkeursvolgorde van categorieën
-const CAT_ORDER = ["Slapen & kamperen","Keuken & eten","Documenten & verzekering","Auto — techniek","Verplicht in auto","Vignetten & tol","Elektronica & navigatie","Veiligheid & gezondheid","Geld","Kleding","Rally-fun (= punten!)"];
+/* ---------- identiteit ("wie ben jij") ---------- */
+let WIE = localStorage.getItem('rally_wie') || '';
+function setWie(n){WIE=n.trim();localStorage.setItem('rally_wie',WIE);$('#whoamiName').textContent=WIE||'wie ben jij?';}
+function openWho(){$('#whoInput').value=WIE;$('#whoModal').classList.add('show');setTimeout(()=>$('#whoInput').focus(),60);}
+$('#whoami').onclick=openWho;
+$('#whoSave').onclick=()=>{const v=$('#whoInput').value.trim();if(!v){toast('Vul je naam in',true);return;}setWie(v);$('#whoModal').classList.remove('show');toast('Hoi '+v+'! 👋');};
+$('#whoInput')?.addEventListener('keydown',e=>{if(e.key==='Enter')$('#whoSave').click();});
+function ensureWie(){ if(WIE) return true; openWho(); toast('Vul eerst je naam in',true); return false; }
+setWie(WIE);
+if(!WIE) openWho();
 
-// Standaard-items (worden 1x in de database gezet als die nog leeg is). [id, categorie, label, extra?]
-const SEED = [
- ["slp1","Slapen & kamperen","Daktent (montage + regenhoes gecheckt)"],
- ["slp2","Slapen & kamperen","Tentje voor Sebastiaan & Rik (haringen, scheerlijnen)"],
- ["slp3","Slapen & kamperen","4× slaapzak (bergpassen: 's nachts koud!)"],
- ["slp4","Slapen & kamperen","4× slaapmat / matras daktent"],
- ["slp5","Slapen & kamperen","Kussens + extra deken",1],
- ["slp6","Slapen & kamperen","Campingstoelen (4×)"],
- ["slp7","Slapen & kamperen","Inklaptafel"],
- ["slp8","Slapen & kamperen","Tarp / luifel tegen regen & zon",1],
- ["slp9","Slapen & kamperen","Hoofdlampen + zaklamp (4×)"],
- ["slp10","Slapen & kamperen","Oordoppen + slaapmasker",1],
- ["kk1","Keuken & eten","Kookstel / gasbrander + gasflessen",1],
- ["kk2","Keuken & eten","Aansteker + lucifers",1],
- ["kk3","Keuken & eten","Pannenset + koekenpan",1],
- ["kk4","Keuken & eten","12V compressor-koelbox + kabel"],
- ["kk5","Keuken & eten","Borden, bestek, bekers, mokken (4×)",1],
- ["kk6","Keuken & eten","Scherp mes + snijplank",1],
- ["kk7","Keuken & eten","Afwasteiltje, bio-afwasmiddel, doek, theedoek",1],
- ["kk8","Keuken & eten","Jerrycan drinkwater (10–20L) + drinkflessen",1],
- ["kk9","Keuken & eten","Vuilniszakken, keukenrol, vershoudfolie, alufolie",1],
- ["kk10","Keuken & eten","Koffiezet + koffie/thee",1],
- ["doc1","Documenten & verzekering","Paspoort/ID — alle 4"],
- ["doc2","Documenten & verzekering","Rijbewijs Dieter (+ Roos)",1],
- ["doc3","Documenten & verzekering","Kentekenbewijs auto",1],
- ["doc4","Documenten & verzekering","Groene kaart / verzekeringsbewijs auto",1],
- ["doc5","Documenten & verzekering","Pechhulp Europa-polis (ANWB o.i.d.)"],
- ["doc6","Documenten & verzekering","Reis-/annuleringsverzekering",1],
- ["doc7","Documenten & verzekering","EHIC / EU-zorgpas (alle 4)",1],
- ["doc8","Documenten & verzekering","Ouderlijke toestemming + kopie ID Sebastiaan & Rik (minderjarig!)",1],
- ["doc9","Documenten & verzekering","Contactgegevens ouders jongens + noodnummers",1],
- ["doc10","Documenten & verzekering","Rally-roadbook gedownload/geprint",1],
- ["au1","Auto — techniek","Olie ververst + niveau"],
- ["au2","Auto — techniek","Banden gecontroleerd (profiel + spanning)"],
- ["au3","Auto — techniek","Reservewiel + krik + wielsleutel aanwezig"],
- ["au4","Auto — techniek","Accu getest"],
- ["au5","Auto — techniek","Airco gecontroleerd (juli = heet)"],
- ["au6","Auto — techniek","Dakdragers + gewichtslimiet daktent gecheckt"],
- ["au7","Auto — techniek","Verlichting compleet (+ reservelampen)",1],
- ["au8","Auto — techniek","Distributieriem-status (2008, 2500km!) — check garage",1],
- ["au9","Auto — techniek","Koelvloeistof + ruitenwisservloeistof bijgevuld",1],
- ["au10","Auto — techniek","Remmen gecontroleerd (Stelvio/Klausen afdalingen)",1],
- ["au11","Auto — techniek","Reservesleutel auto meenemen",1],
- ["vp1","Verplicht in auto","Gevarendriehoek",1],
- ["vp2","Verplicht in auto","Veiligheidshesjes — 1 per inzittende (IT/SI/HR)",1],
- ["vp3","Verplicht in auto","EHBO-kit (verplicht HU, AT)",1],
- ["vp4","Verplicht in auto","Reserve-lampenset",1],
- ["vp5","Verplicht in auto","Brandblusser (aangeraden)",1],
- ["to1","Vignetten & tol","Zwitserland: jaarvignet ~40 CHF (verplicht!)",1],
- ["to2","Vignetten & tol","Slovenië: e-vinjeta",1],
- ["to3","Vignetten & tol","Hongarije: e-matrica",1],
- ["to4","Vignetten & tol","Frankrijk + Italië: péage/autostrada",1],
- ["el1","Elektronica & navigatie","Powerbanks (geladen)"],
- ["el2","Elektronica & navigatie","USB-C laders + kabels"],
- ["el3","Elektronica & navigatie","Offline kaarten (OsmAnd/Maps.me)"],
- ["el4","Elektronica & navigatie","12V USB-splitter / autolader"],
- ["el5","Elektronica & navigatie","Telefoonhouder auto",1],
- ["el6","Elektronica & navigatie","EU-roaming / databundel gecheckt",1],
- ["ge1","Veiligheid & gezondheid","Persoonlijke medicatie (alle 4)"],
- ["ge2","Veiligheid & gezondheid","Reisapotheek: paracetamol, ORS, pleisters, anti-allergie",1],
- ["ge3","Veiligheid & gezondheid","Zonnebrand + zonnebril + petten",1],
- ["ge4","Veiligheid & gezondheid","Muggenspray",1],
- ["gd1","Geld","Contant: euro's",1],
- ["gd2","Geld","Contant: Zwitserse frank (CHF) + forint (HUF)",1],
- ["gd3","Geld","Creditcard + pinpas (meld reis bij bank)",1],
- ["kl1","Kleding","Regenjas"],
- ["kl2","Kleding","Slippers"],
- ["kl3","Kleding","Warme trui (bergpassen)"],
- ["ra1","Rally-fun (= punten!)","Teamnaam vastgelegd",1],
- ["ra2","Rally-fun (= punten!)","Auto-decoratie / thema (max 50 pt)",1],
- ["ra3","Rally-fun (= punten!)","Team-outfits / verkleedkleding (max 40 pt)",1],
- ["ra4","Rally-fun (= punten!)","Teamvlag + stickers (quick-win punten)",1],
- ["ra5","Rally-fun (= punten!)","Rood interieur-accent (quick win)",1],
-];
-
-let filter = "all";
-let items = {}; // item_id -> {category,label,note,checked,checked_by,sort}
-let sb = null;
-
-const $ = s => document.querySelector(s);
-const initials = n => (n||"?")[0];
-const esc = s => (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-
-function sortedCats(){
-  const present = [...new Set(Object.values(items).map(i=>i.category||"Overig"))];
-  present.sort((a,b)=>{
-    const ia=CAT_ORDER.indexOf(a), ib=CAT_ORDER.indexOf(b);
-    return (ia<0?99:ia)-(ib<0?99:ib) || a.localeCompare(b);
-  });
-  return present;
-}
-
-function render(){
-  // datalist categorieën
-  $("#catlist").innerHTML = sortedCats().map(c=>`<option value="${esc(c)}">`).join("");
-  const list = $("#list"); list.innerHTML="";
-  const all = Object.entries(items);
-  let done = all.filter(([,v])=>v.checked).length, tot = all.length;
-  for(const cat of sortedCats()){
-    let rows = all.filter(([,v])=>(v.category||"Overig")===cat);
-    rows.sort((a,b)=>(a[1].sort||0)-(b[1].sort||0));
-    const cdone = rows.filter(([,v])=>v.checked).length;
-    const visible = rows.filter(([,v])=> filter==="all" || (filter==="open"&&!v.checked) || (filter==="done"&&v.checked));
-    if(!visible.length) continue;
-    const h=document.createElement("div"); h.className="cat";
-    h.innerHTML=`<span>${esc(cat)}</span><small>${cdone}/${rows.length}</small>`;
-    list.appendChild(h);
-    for(const [id,v] of visible){
-      const el=document.createElement("div");
-      el.className="item"+(v.checked?" done":"");
-      el.innerHTML=`
-        <div class="box" data-toggle="${id}">${v.checked?"✓":""}</div>
-        <div class="label" data-toggle="${id}"><b>${esc(v.label)}</b>${v.note?'<span class="tag">extra</span>':''}</div>
-        <button class="del" data-del="${id}" title="Verwijderen">✕</button>`;
-      list.appendChild(el);
-    }
-  }
-  const pct = tot?Math.round(done/tot*100):0;
-  $("#progbar").style.width = pct+"%";
-  $("#progtxt").textContent = `${done} / ${tot} klaar (${pct}%)`;
-}
-
-async function toggle(id){
-  const v = items[id]; if(!v) return;
-  const next = !v.checked;
-  v.checked=next;
-  render();
-  if(sb){
-    const {error}=await sb.from("checklist").update({checked:next,updated_at:new Date().toISOString()}).eq("item_id",id);
-    if(error) banner("⚠️ Opslaan mislukt: "+error.message,true);
-  }
-}
-
-async function addItem(){
-  const label=$("#add-label").value.trim();
-  let cat=$("#add-cat").value.trim()||"Overig";
-  if(!label){ $("#add-label").focus(); return; }
-  const id = "u"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-  const maxSort = Math.max(0,...Object.values(items).filter(i=>i.category===cat).map(i=>i.sort||0));
-  const row={item_id:id,category:cat,label,note:false,checked:false,checked_by:null,sort:maxSort+10};
-  items[id]={category:cat,label,note:false,checked:false,checked_by:null,sort:row.sort};
-  $("#add-label").value=""; render();
-  if(sb){
-    const {error}=await sb.from("checklist").insert(row);
-    if(error) banner("⚠️ Toevoegen mislukt: "+error.message,true);
-  }
-}
-
-async function delItem(id){
-  const v=items[id]; if(!v) return;
-  if(!confirm(`"${v.label}" verwijderen voor het hele team?`)) return;
-  delete items[id]; render();
-  if(sb){
-    const {error}=await sb.from("checklist").delete().eq("item_id",id);
-    if(error) banner("⚠️ Verwijderen mislukt: "+error.message,true);
-  }
-}
-
-function banner(msg,bad){ $("#status").innerHTML=`<div class="${bad?'bad-banner':'ok-banner'}">${msg}</div>`; }
-
-async function seedIfEmpty(){
-  const seedRows = SEED.map((s,idx)=>({item_id:s[0],category:s[1],label:s[2],note:!!s[3],checked:false,checked_by:null,sort:idx*10}));
-  const {error}=await sb.from("checklist").upsert(seedRows,{onConflict:"item_id",ignoreDuplicates:true});
-  if(error) banner("⚠️ Standaardlijst plaatsen mislukt: "+error.message,true);
-}
-
-async function loadAll(){
-  let {data,error}=await sb.from("checklist").select("*");
-  if(error){ banner("⚠️ Verbinden mislukt: "+error.message,true); return; }
-  if(!data.length){ await seedIfEmpty(); ({data,error}=await sb.from("checklist").select("*")); }
-  items={};
-  for(const r of data) items[r.item_id]={category:r.category||"Overig",label:r.label||r.item_id,note:!!r.note,checked:!!r.checked,checked_by:r.checked_by,sort:r.sort||0};
-  render();
-}
-
-function initRealtime(){
-  sb.channel("checklist-rt").on("postgres_changes",{event:"*",schema:"public",table:"checklist"},p=>{
-    if(p.eventType==="DELETE"){ if(p.old&&p.old.item_id) delete items[p.old.item_id]; }
-    else { const r=p.new; if(r&&r.item_id) items[r.item_id]={category:r.category||"Overig",label:r.label||r.item_id,note:!!r.note,checked:!!r.checked,checked_by:r.checked_by,sort:r.sort||0}; }
-    render();
-  }).subscribe();
-}
-
-// events
-$("#add-btn").onclick=addItem;
-$("#add-label").addEventListener("keydown",e=>{ if(e.key==="Enter") addItem(); });
-$("#list").addEventListener("click",e=>{
-  const t=e.target.closest("[data-toggle]"); const d=e.target.closest("[data-del]");
-  if(d){ delItem(d.dataset.del); return; }
-  if(t){ toggle(t.dataset.toggle); }
+/* ---------- tabs ---------- */
+$$('.tab').forEach(t=>t.onclick=()=>{
+  $$('.tab').forEach(x=>x.classList.remove('active'));
+  $$('.panel').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');
+  $('#panel-'+t.dataset.tab).classList.add('active');
+  window.scrollTo({top:0,behavior:'smooth'});
 });
-$("#f-all").onclick=()=>{filter="all";setFilterUI();render();};
-$("#f-open").onclick=()=>{filter="open";setFilterUI();render();};
-$("#f-done").onclick=()=>{filter="done";setFilterUI();render();};
-function setFilterUI(){ $("#f-all").classList.toggle("on",filter==="all"); $("#f-open").classList.toggle("on",filter==="open"); $("#f-done").classList.toggle("on",filter==="done"); }
 
-render();
-if(SUPABASE_URL.includes("VUL_IN")||SUPABASE_KEY.includes("VUL_IN")){
-  banner("⚠️ Nog niet gekoppeld aan Supabase — zie ⚙️ setup.",true);
-}else{
-  sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
-  loadAll(); initRealtime();
-  banner("✅ Online verbonden — lijst en vinkjes worden live gedeeld met het team.");
+/* ============================================================
+   CHECKLIST
+   ============================================================ */
+let CL = [];          // alle items
+let clFilter = 'all';
+let clQuery  = '';
+let leenQuery= '';
+
+$$('.chip').forEach(c=>c.onclick=()=>{$$('.chip').forEach(x=>x.classList.remove('active'));c.classList.add('active');clFilter=c.dataset.filter;renderCL();});
+$('#clSearch').addEventListener('input',e=>{clQuery=e.target.value.toLowerCase().trim();renderCL();});
+$('#leenSearch').addEventListener('input',e=>{leenQuery=e.target.value.toLowerCase().trim();renderLeen();});
+
+async function loadCL(){
+  $('#clList').innerHTML='<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
+  const {data,error}=await sb.from('checklist').select('*').order('sort',{ascending:true});
+  if(error){$('#clList').innerHTML='<div class="empty"><div class="big">⚠️</div>Kon checklist niet laden.<br><button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="loadCL()">Opnieuw</button></div>';toast('Laden mislukt',true);return;}
+  CL=data||[];
+  refreshCats();
+  renderCL();
+  renderLeen();
 }
+
+function refreshCats(){
+  const cats=[...new Set(CL.map(i=>i.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'nl'));
+  $('#catList').innerHTML=cats.map(c=>`<option value="${esc(c)}">`).join('');
+}
+
+function renderCL(){
+  const total=CL.length, done=CL.filter(i=>i.checked).length;
+  $('#tabCnt').textContent=`${done}/${total}`;
+
+  let items=CL.slice();
+  if(clFilter==='todo') items=items.filter(i=>!i.checked);
+  if(clFilter==='done') items=items.filter(i=>i.checked);
+  if(clQuery) items=items.filter(i=>[i.label,i.category,i.voor_wie,i.geleend_van,i.sponsor].some(v=>(v||'').toLowerCase().includes(clQuery)));
+
+  if(!items.length){
+    $('#clList').innerHTML=`<div class="empty"><div class="big">📭</div>${total?'Niets gevonden met deze filter.':'Nog geen items — voeg er hierboven één toe!'}</div>`;
+    return;
+  }
+
+  // groeperen per categorie, behoud sort-volgorde
+  const groups={};
+  items.forEach(i=>{const c=i.category||'Overig';(groups[c]=groups[c]||[]).push(i);});
+  const cats=Object.keys(groups).sort((a,b)=>a.localeCompare(b,'nl'));
+
+  $('#clList').innerHTML=cats.map(cat=>{
+    const rows=groups[cat];
+    const d=rows.filter(r=>r.checked).length;
+    // knop kijkt naar ALLE items in de categorie (niet alleen de gefilterde rij)
+    const allInCat=CL.filter(i=>(i.category||'Overig')===cat);
+    const allChecked=allInCat.length>0 && allInCat.every(i=>i.checked);
+    return `<div class="cat">
+      <div class="cat-head">${esc(cat)} <span class="cat-cnt">${d}/${rows.length}</span>
+        <button class="btn btn-ghost btn-sm cat-toggle" style="margin-left:auto" data-cat="${esc(cat)}" data-check="${allChecked?0:1}">
+          ${allChecked?'☐ alles uit':'☑ alles aan'}
+        </button>
+      </div>
+      ${rows.map(itemHTML).join('')}
+    </div>`;
+  }).join('');
+}
+
+function itemHTML(i){
+  const tags=[];
+  if(i.voor_wie)    tags.push(`<span class="tag tag-wie">👤 ${esc(i.voor_wie)}</span>`);
+  if(i.geleend_van) tags.push(`<span class="tag tag-leen">🤝 geleend van ${esc(i.geleend_van)}</span>`);
+  if(i.sponsor)     tags.push(`<span class="tag tag-spon">💶 sponsor ${esc(i.sponsor)}</span>`);
+  if(i.checked && i.checked_by) tags.push(`<span class="tag tag-by">✓ ${esc(i.checked_by)}</span>`);
+  return `<div class="item ${i.checked?'done':''}">
+    <input type="checkbox" class="check" ${i.checked?'checked':''} onchange="toggleItem('${esc(i.item_id)}',this.checked)" aria-label="afvinken">
+    <div class="item-body">
+      <div class="item-label">${esc(i.label)}</div>
+      ${tags.length?`<div class="item-meta">${tags.join('')}</div>`:''}
+    </div>
+    <div class="item-actions">
+      <button class="icon-btn" title="Dupliceer voor andere persoon" onclick="openDup('${esc(i.item_id)}')">👥</button>
+      <button class="icon-btn" title="Bewerken" onclick="openEdit('${esc(i.item_id)}')">✏️</button>
+    </div>
+  </div>`;
+}
+
+// per-sectie alles aan/uit
+$('#clList').addEventListener('click',e=>{
+  const btn=e.target.closest('.cat-toggle');if(!btn)return;
+  toggleCat(btn.dataset.cat, btn.dataset.check==='1');
+});
+async function toggleCat(cat,check){
+  const targets=CL.filter(i=>(i.category||'Overig')===cat);
+  const ids=targets.map(i=>i.item_id);
+  if(!ids.length)return;
+  targets.forEach(i=>{i.checked=check;i.checked_by=check?WIE:null;});
+  renderCL();
+  const {error}=await sb.from('checklist').update({checked,checked_by:check?(WIE||null):null,updated_at:new Date().toISOString()}).in('item_id',ids);
+  if(error){toast('Opslaan mislukt',true);loadCL();return;}
+  toast(check?`Alles aangevinkt in "${cat}" ✓`:`Alles uitgevinkt in "${cat}"`);
+}
+
+async function toggleItem(id,checked){
+  const it=CL.find(x=>x.item_id===id); if(it){it.checked=checked;it.checked_by=checked?WIE:null;}
+  renderCL();
+  const {error}=await sb.from('checklist').update({checked,checked_by:checked?(WIE||null):null,updated_at:new Date().toISOString()}).eq('item_id',id);
+  if(error){toast('Opslaan mislukt',true);loadCL();}
+}
+
+$('#addBtn').onclick=async()=>{
+  const label=$('#nLabel').value.trim();
+  if(!label){toast('Vul in wat je meeneemt',true);$('#nLabel').focus();return;}
+  const cat=$('#nCat').value.trim()||'Overig';
+  let aantal=parseInt($('#nAantal').value,10);
+  if(!Number.isFinite(aantal)||aantal<1)aantal=1;
+  aantal=Math.min(aantal,50);
+  const wie=$('#nWie').value.trim()||null, leen=$('#nLeen').value.trim()||null, spon=$('#nSpon').value.trim()||null;
+  const maxSort=CL.reduce((m,i)=>Math.max(m,i.sort||0),0);
+
+  // 1 aantal = 1 item; >1 = uitgesplitst in net zoveel losse items (1/N … N/N)
+  const rows=[];
+  for(let n=1;n<=aantal;n++){
+    rows.push({
+      item_id:randId(),
+      label: aantal>1 ? `${label} (${n}/${aantal})` : label,
+      category:cat, checked:false, note:false, sort:maxSort+10*n,
+      voor_wie:wie, geleend_van:leen, sponsor:spon
+    });
+  }
+  $('#addBtn').disabled=true;
+  const {error}=await sb.from('checklist').insert(rows);
+  $('#addBtn').disabled=false;
+  if(error){toast('Toevoegen mislukt',true);return;}
+  if(leen)ensureLener(leen);
+  ['#nLabel','#nWie','#nLeen','#nSpon'].forEach(s=>$(s).value='');
+  $('#nAantal').value='1';
+  $('#nLabel').focus();
+  toast(aantal>1?`${aantal} items toegevoegd ✓`:'Toegevoegd ✓');
+  loadCL();
+};
+
+/* ---------- LEENLIJST: geleende spullen per persoon ---------- */
+function renderLeen(){
+  const geleend=CL.filter(i=>i.geleend_van && i.geleend_van.trim());
+  $('#leenCnt').textContent=geleend.length;
+
+  let items=geleend;
+  if(leenQuery) items=items.filter(i=>[i.label,i.category,i.voor_wie,i.geleend_van].some(v=>(v||'').toLowerCase().includes(leenQuery)));
+
+  if(!items.length){
+    $('#leenList').innerHTML=`<div class="empty"><div class="big">🤝</div>${geleend.length?'Niets gevonden.':'Nog niets geleend.<br>Vul bij een item "Geleend van" in en het verschijnt hier.'}</div>`;
+    return;
+  }
+
+  // groeperen per uitlener
+  const groups={};
+  items.forEach(i=>{const p=i.geleend_van.trim();(groups[p]=groups[p]||[]).push(i);});
+  const personen=Object.keys(groups).sort((a,b)=>a.localeCompare(b,'nl'));
+
+  $('#leenList').innerHTML=personen.map(p=>{
+    const rows=groups[p];
+    return `<div class="cat">
+      <div class="cat-head">🤝 ${esc(p)} <span class="cat-cnt">${rows.length} stuk${rows.length===1?'':'s'}</span></div>
+      ${rows.map(leenItemHTML).join('')}
+    </div>`;
+  }).join('');
+}
+
+function leenItemHTML(i){
+  const tags=[];
+  if(i.category) tags.push(`<span class="tag" style="background:#eee;color:#555">${esc(i.category)}</span>`);
+  if(i.voor_wie) tags.push(`<span class="tag tag-wie">👤 ${esc(i.voor_wie)}</span>`);
+  if(i.checked && i.checked_by) tags.push(`<span class="tag tag-by">✓ ${esc(i.checked_by)}</span>`);
+  return `<div class="item">
+    <div class="item-body">
+      <div class="item-label">${esc(i.label)}</div>
+      ${tags.length?`<div class="item-meta">${tags.join('')}</div>`:''}
+    </div>
+    <div class="item-actions">
+      <button class="btn btn-ghost btn-sm" title="Markeer als teruggegeven" onclick="returnItem('${esc(i.item_id)}')">↩︎ teruggegeven</button>
+      <button class="icon-btn" title="Bewerken" onclick="openEdit('${esc(i.item_id)}')">✏️</button>
+    </div>
+  </div>`;
+}
+
+async function returnItem(id){
+  const it=CL.find(x=>x.item_id===id);if(!it)return;
+  if(!confirm(`"${it.label}" teruggegeven aan ${it.geleend_van}?\nHet wordt uit de leenlijst gehaald.`))return;
+  it.geleend_van=null;
+  renderLeen();renderCL();
+  const {error}=await sb.from('checklist').update({geleend_van:null,updated_at:new Date().toISOString()}).eq('item_id',id);
+  if(error){toast('Opslaan mislukt',true);loadCL();return;}
+  toast('Teruggegeven ✓ — uit leenlijst gehaald');
+}
+
+/* ---------- UITLENERS beheren (mensen van wie we lenen) ---------- */
+let UITLENERS=[]; // [{id,naam}]
+async function loadUitleners(){
+  const {data,error}=await sb.from('uitleners').select('*').order('naam',{ascending:true});
+  if(error){console.warn('uitleners laden mislukt',error);return;}
+  UITLENERS=data||[];
+  renderLenerChips();
+  refreshLenerDatalist();
+}
+function refreshLenerDatalist(){
+  $('#leenNames').innerHTML=UITLENERS.map(u=>`<option value="${esc(u.naam)}">`).join('');
+}
+function renderLenerChips(){
+  const box=$('#lenerChips');if(!box)return;
+  if(!UITLENERS.length){box.innerHTML='<span class="note">Nog geen uitleners aangemaakt.</span>';return;}
+  box.innerHTML=UITLENERS.map(u=>`<span class="lener-chip">${esc(u.naam)}<button title="verwijderen" onclick="delLener('${esc(u.naam)}')">✕</button></span>`).join('');
+}
+async function addLener(naam){
+  naam=(naam||'').trim();
+  if(!naam)return false;
+  if(UITLENERS.some(u=>u.naam.toLowerCase()===naam.toLowerCase()))return true; // bestaat al
+  const {error}=await sb.from('uitleners').insert({naam});
+  if(error){toast('Toevoegen mislukt',true);return false;}
+  return true;
+}
+$('#addLenerBtn').onclick=async()=>{
+  const v=$('#newLener').value.trim();
+  if(!v){toast('Vul een naam in',true);$('#newLener').focus();return;}
+  $('#addLenerBtn').disabled=true;
+  const ok=await addLener(v);
+  $('#addLenerBtn').disabled=false;
+  if(ok){$('#newLener').value='';toast('Uitlener toegevoegd ✓');loadUitleners();$('#newLener').focus();}
+};
+$('#newLener')?.addEventListener('keydown',e=>{if(e.key==='Enter')$('#addLenerBtn').click();});
+async function delLener(naam){
+  if(!confirm(`Uitlener "${naam}" uit de lijst halen?\n(De items zelf blijven staan.)`))return;
+  const {error}=await sb.from('uitleners').delete().eq('naam',naam);
+  if(error){toast('Verwijderen mislukt',true);return;}
+  toast('Uitlener verwijderd');loadUitleners();
+}
+// nieuw getypte naam automatisch als uitlener bewaren
+async function ensureLener(naam){
+  naam=(naam||'').trim();
+  if(!naam)return;
+  if(UITLENERS.some(u=>u.naam.toLowerCase()===naam.toLowerCase()))return;
+  await addLener(naam);
+  loadUitleners();
+}
+
+/* edit */
+function openEdit(id){
+  const i=CL.find(x=>x.item_id===id);if(!i)return;
+  $('#eId').value=i.item_id;$('#eLabel').value=i.label||'';$('#eCat').value=i.category||'';
+  $('#eWie').value=i.voor_wie||'';$('#eLeen').value=i.geleend_van||'';$('#eSpon').value=i.sponsor||'';
+  $('#editModal').classList.add('show');
+}
+$('#eCancel').onclick=()=>$('#editModal').classList.remove('show');
+$('#eSave').onclick=async()=>{
+  const id=$('#eId').value;const label=$('#eLabel').value.trim();
+  if(!label){toast('Wat mag niet leeg zijn',true);return;}
+  const upd={label,category:$('#eCat').value.trim()||'Overig',
+    voor_wie:$('#eWie').value.trim()||null,geleend_van:$('#eLeen').value.trim()||null,sponsor:$('#eSpon').value.trim()||null,
+    updated_at:new Date().toISOString()};
+  $('#eSave').disabled=true;
+  const {error}=await sb.from('checklist').update(upd).eq('item_id',id);
+  $('#eSave').disabled=false;
+  if(error){toast('Opslaan mislukt',true);return;}
+  if(upd.geleend_van)ensureLener(upd.geleend_van);
+  $('#editModal').classList.remove('show');toast('Opgeslagen ✓');loadCL();
+};
+$('#eDelete').onclick=async()=>{
+  const id=$('#eId').value;
+  if(!confirm('Dit item verwijderen?'))return;
+  const {error}=await sb.from('checklist').delete().eq('item_id',id);
+  if(error){toast('Verwijderen mislukt',true);return;}
+  $('#editModal').classList.remove('show');toast('Verwijderd');loadCL();
+};
+
+/* dupliceer voor andere persoon */
+function openDup(id){
+  const i=CL.find(x=>x.item_id===id);if(!i)return;
+  $('#dId').value=i.item_id;$('#dWie').value='';
+  $('#dupModal').classList.add('show');setTimeout(()=>$('#dWie').focus(),60);
+}
+$('#dCancel').onclick=()=>$('#dupModal').classList.remove('show');
+$('#dSave').onclick=async()=>{
+  const src=CL.find(x=>x.item_id===$('#dId').value);if(!src)return;
+  const wie=$('#dWie').value.trim();
+  if(!wie){toast('Voor wie is deze kopie?',true);return;}
+  let newId=`${src.item_id}-${slug(wie)}`;
+  if(CL.some(x=>x.item_id===newId)) newId+='-'+randId().slice(0,4);
+  const row={item_id:newId,label:src.label,category:src.category,checked:false,note:src.note||false,
+    sort:(src.sort||0)+1,voor_wie:wie,geleend_van:src.geleend_van||null,sponsor:src.sponsor||null};
+  $('#dSave').disabled=true;
+  const {error}=await sb.from('checklist').insert(row);
+  $('#dSave').disabled=false;
+  if(error){toast('Dupliceren mislukt',true);return;}
+  $('#dupModal').classList.remove('show');toast('Gedupliceerd voor '+wie+' ✓');loadCL();
+};
+
+/* ============================================================
+   REISVERSLAG
+   ============================================================ */
+let POSTS=[], FOTOS=[];
+$('#pDag').value=new Date().toISOString().slice(0,10);
+
+/* --- foto's verkleinen client-side --- */
+async function resizeToJpeg(file,maxSize=1600,quality=0.8){
+  let bitmap;
+  try{ bitmap=await createImageBitmap(file,{imageOrientation:'from-image'}); }
+  catch(e){ bitmap=await createImageBitmap(file); } // fallback oudere browsers
+  let {width,height}=bitmap;
+  const longest=Math.max(width,height);
+  if(longest>maxSize){const s=maxSize/longest;width=Math.round(width*s);height=Math.round(height*s);}
+  const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
+  const ctx=canvas.getContext('2d');ctx.drawImage(bitmap,0,0,width,height);
+  if(bitmap.close)bitmap.close();
+  const blob=await new Promise(res=>canvas.toBlob(res,'image/jpeg',quality));
+  return blob;
+}
+
+/* upload-rijen: state per foto, voorkomt dubbele upload */
+let queue=[]; // {file, name, caption, blob, status:'wait|busy|ok|err', pad, thumbUrl}
+$('#pFotos').addEventListener('change',async e=>{
+  const files=[...e.target.files];
+  for(const f of files){
+    const entry={file:f,name:f.name,caption:'',blob:null,status:'wait',pad:null,thumbUrl:URL.createObjectURL(f)};
+    queue.push(entry);
+  }
+  e.target.value='';
+  renderQueue();
+  // alvast verkleinen (toon "klaar om te uploaden")
+  for(const entry of queue){ if(!entry.blob && entry.status==='wait'){ try{entry.blob=await resizeToJpeg(entry.file);}catch(err){console.warn(err);} } }
+});
+
+function renderQueue(){
+  $('#upList').innerHTML=queue.map((q,idx)=>{
+    const st={wait:['wait','klaar'],busy:['busy','uploaden…'],ok:['ok','✓ geüpload'],err:['err','⚠ mislukt']}[q.status];
+    return `<div class="up-row">
+      <img class="up-thumb" src="${q.thumbUrl}" alt="">
+      <div class="grow">
+        <input placeholder="Bijschrift (optie)" value="${esc(q.caption)}" oninput="queue[${idx}].caption=this.value" ${q.status==='ok'?'disabled':''}>
+        <div class="up-status ${st[0]}">${st[1]}${q.status==='err'?` · <a href="#" onclick="retryOne(${idx});return false">opnieuw</a>`:''}</div>
+      </div>
+      ${q.status==='ok'?'':`<button class="icon-btn" title="verwijderen" onclick="dropOne(${idx})">✕</button>`}
+    </div>`;
+  }).join('');
+}
+function dropOne(idx){queue.splice(idx,1);renderQueue();}
+async function retryOne(idx){const q=queue[idx];if(!q)return;q.status='wait';renderQueue();}
+
+async function uploadOne(entry,post_id){
+  if(entry.status==='ok') return true;       // nooit dubbel
+  entry.status='busy';renderQueue();
+  try{
+    if(!entry.blob) entry.blob=await resizeToJpeg(entry.file);
+    const pad=`${Date.now()}-${crypto.randomUUID()}.jpg`;
+    const {error:upErr}=await sb.storage.from(BUCKET).upload(pad,entry.blob,{contentType:'image/jpeg',upsert:false});
+    if(upErr)throw upErr;
+    const {error:insErr}=await sb.from('fotos').insert({post_id:post_id||null,pad,bijschrift:entry.caption.trim()||null,geupload_door:WIE||null});
+    if(insErr)throw insErr;
+    entry.pad=pad;entry.status='ok';renderQueue();
+    return true;
+  }catch(err){
+    console.error(err);entry.status='err';renderQueue();return false;
+  }
+}
+
+$('#postBtn').onclick=async()=>{
+  if(!ensureWie())return;
+  const verslag=$('#pVerslag').value.trim();
+  const titel=$('#pTitel').value.trim();
+  const dag=$('#pDag').value||new Date().toISOString().slice(0,10);
+  if(!verslag && !titel && !queue.length){toast('Schrijf iets of voeg een foto toe',true);return;}
+
+  const btn=$('#postBtn');btn.disabled=true;
+  let post_id=null;
+
+  try{
+    // maak post als er tekst is (of als er foto's zijn die bij deze dag horen)
+    if(verslag||titel){
+      const {data,error}=await sb.from('posts').insert({dag,titel:titel||null,verslag:verslag||null,auteur:WIE||null}).select().single();
+      if(error)throw error;
+      post_id=data.id;
+    }else if(queue.length){
+      // foto's zonder verslagtekst: koppel aan een kale post van die dag zodat ze gegroepeerd blijven
+      const {data,error}=await sb.from('posts').insert({dag,titel:null,verslag:null,auteur:WIE||null}).select().single();
+      if(error)throw error;
+      post_id=data.id;
+    }
+  }catch(err){
+    console.error(err);btn.disabled=false;toast('Verslag opslaan mislukt — probeer opnieuw',true);return;
+  }
+
+  // upload foto's één voor één met voortgang
+  let okCount=0,failCount=0;
+  for(const entry of queue){
+    if(entry.status==='ok'){okCount++;continue;}
+    const ok=await uploadOne(entry,post_id);
+    ok?okCount++:failCount++;
+  }
+
+  btn.disabled=false;
+  if(failCount){
+    toast(`${okCount} foto('s) geplaatst, ${failCount} mislukt — gebruik "opnieuw"`,true);
+  }else{
+    toast('Geplaatst! 🎉');
+    // reset formulier (geslaagde uploads blijven niet in queue staan)
+    $('#pVerslag').value='';$('#pTitel').value='';
+    queue=[];renderQueue();
+  }
+  loadFeed();
+};
+
+async function loadFeed(){
+  $('#feed').innerHTML='<div class="skeleton" style="height:120px"></div><div class="skeleton" style="height:120px"></div>';
+  const [{data:p,error:pe},{data:f,error:fe}]=await Promise.all([
+    sb.from('posts').select('*').order('dag',{ascending:false}).order('created_at',{ascending:false}),
+    sb.from('fotos').select('*').order('created_at',{ascending:true})
+  ]);
+  if(pe||fe){$('#feed').innerHTML='<div class="empty"><div class="big">⚠️</div>Kon reisverslag niet laden.<br><button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="loadFeed()">Opnieuw</button></div>';return;}
+  POSTS=p||[];FOTOS=f||[];
+  renderFeed();
+}
+
+function publicUrl(pad){
+  if(!pad)return'';
+  if(/^https?:\/\//.test(pad))return pad; // backwards-compat als ooit een volledige url is opgeslagen
+  return sb.storage.from(BUCKET).getPublicUrl(pad).data.publicUrl;
+}
+
+let LB=[]; // huidige lightbox-set
+function renderFeed(){
+  if(!POSTS.length && !FOTOS.length){
+    $('#feed').innerHTML='<div class="empty"><div class="big">🗺️</div>Nog geen reisverslagen.<br>De avonturen verschijnen hier zodra ze geplaatst worden!</div>';
+    return;
+  }
+  // foto's per post
+  const byPost={};FOTOS.forEach(f=>{(byPost[f.post_id||'_los']=byPost[f.post_id||'_los']||[]).push(f);});
+
+  // groepeer posts per dag
+  const days={};POSTS.forEach(p=>{(days[p.dag]=days[p.dag]||[]).push(p);});
+  const dayKeys=Object.keys(days).sort((a,b)=>b.localeCompare(a)); // nieuwste boven
+
+  let html=dayKeys.map(dag=>{
+    const posts=days[dag];
+    const inner=posts.map(p=>{
+      const fotos=byPost[p.id]||[];
+      const hasText=p.titel||p.verslag;
+      if(!hasText && !fotos.length) return '';
+      return `<div class="post">
+        ${p.titel?`<h3>${esc(p.titel)}</h3>`:''}
+        ${(p.auteur)?`<div class="by">door ${esc(p.auteur)}</div>`:''}
+        ${p.verslag?`<div class="verslag">${esc(p.verslag)}</div>`:''}
+        ${fotos.length?`<div class="fotogrid">${fotos.map(fotoFig).join('')}</div>`:''}
+      </div>`;
+    }).join('');
+    return `<div class="dag"><div class="dag-head">${esc(fmtDag(dag))}</div>${inner}</div>`;
+  }).join('');
+
+  // losse foto's zonder gekoppelde post
+  const los=byPost['_los']||[];
+  if(los.length){
+    html+=`<div class="dag losse-fotos"><div class="dag-head">📷 Losse foto's</div><div class="post"><div class="fotogrid">${los.map(fotoFig).join('')}</div></div></div>`;
+  }
+  $('#feed').innerHTML=html||'<div class="empty"><div class="big">🗺️</div>Nog geen reisverslagen.</div>';
+
+  // lightbox-set verzamelen
+  LB=$$('#feed .fotogrid img').map(img=>({src:img.dataset.full,cap:img.dataset.cap||''}));
+}
+
+function fotoFig(f){
+  const url=publicUrl(f.pad);
+  return `<figure class="lbfig" data-full="${esc(url)}" data-cap="${esc(f.bijschrift||'')}">
+    <img loading="lazy" src="${esc(url)}" data-full="${esc(url)}" data-cap="${esc(f.bijschrift||'')}" alt="${esc(f.bijschrift||'rally foto')}">
+    ${f.bijschrift?`<figcaption>${esc(f.bijschrift)}</figcaption>`:''}
+  </figure>`;
+}
+
+/* lightbox — via event-delegatie, geen fragiele inline onclick */
+let lbIdx=0;
+$('#feed').addEventListener('click',e=>{
+  const fig=e.target.closest('.lbfig');if(!fig)return;
+  openLB(fig.dataset.full, fig.dataset.cap||'');
+});
+function openLB(src,cap){
+  lbIdx=LB.findIndex(x=>x.src===src);if(lbIdx<0){LB=[{src,cap}];lbIdx=0;}
+  showLB();$('#lightbox').classList.add('show');
+}
+function showLB(){const x=LB[lbIdx];if(!x)return;$('#lbImg').src=x.src;$('#lbCap').textContent=x.cap||'';}
+$('#lbClose').onclick=()=>$('#lightbox').classList.remove('show');
+$('#lbPrev').onclick=()=>{lbIdx=(lbIdx-1+LB.length)%LB.length;showLB();};
+$('#lbNext').onclick=()=>{lbIdx=(lbIdx+1)%LB.length;showLB();};
+$('#lightbox').addEventListener('click',e=>{if(e.target.id==='lightbox')$('#lightbox').classList.remove('show');});
+document.addEventListener('keydown',e=>{
+  if(!$('#lightbox').classList.contains('show'))return;
+  if(e.key==='Escape')$('#lightbox').classList.remove('show');
+  if(e.key==='ArrowLeft')$('#lbPrev').click();
+  if(e.key==='ArrowRight')$('#lbNext').click();
+});
+
+/* sluit modals bij klik op achtergrond */
+$$('.modal-bg').forEach(m=>m.addEventListener('click',e=>{if(e.target===m && m.id!=='whoModal')m.classList.remove('show');}));
+
+/* ============================================================
+   REALTIME
+   ============================================================ */
+function subscribeRealtime(){
+  sb.channel('cl-rt').on('postgres_changes',{event:'*',schema:'public',table:'checklist'},()=>loadCL()).subscribe();
+  sb.channel('uitleners-rt').on('postgres_changes',{event:'*',schema:'public',table:'uitleners'},()=>loadUitleners()).subscribe();
+  sb.channel('posts-rt').on('postgres_changes',{event:'*',schema:'public',table:'posts'},()=>{showNewBanner();loadFeed();}).subscribe();
+  sb.channel('fotos-rt').on('postgres_changes',{event:'*',schema:'public',table:'fotos'},()=>loadFeed()).subscribe();
+}
+let bannerSeen=true;
+function showNewBanner(){
+  // toon korte hint dat er nieuws is (handig voor thuisblijvers die de Reisverslag-tab open hebben)
+  if($('#panel-reisverslag').classList.contains('active'))return;
+  const b=$('#feedBanner');b.textContent='✨ Er is een nieuw reisverslag geplaatst!';b.classList.add('show');
+  clearTimeout(b._t);b._t=setTimeout(()=>b.classList.remove('show'),6000);
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+loadCL();
+loadUitleners();
+loadFeed();
+subscribeRealtime();
 </script>
 </body>
 </html>
