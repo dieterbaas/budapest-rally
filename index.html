@@ -392,6 +392,18 @@ details.card .collapsible-body{padding:0 16px 16px}
     <div id="clList"></div>
 
     <details class="card collapsible" style="margin-top:22px">
+      <summary><span>👥 Uitleners beheren <span id="lenerCnt" style="font-weight:600;color:var(--muted);font-size:.82rem"></span></span><span class="chev">▸</span></summary>
+      <div class="collapsible-body">
+        <p class="note" style="margin-top:0;margin-bottom:10px">Maak hier de mensen aan van wie je leent. Ze verschijnen dan als keuze bij "Geleend van" op elk item.</p>
+        <div style="display:flex;gap:8px">
+          <input id="newLener" placeholder="Naam, bv. buurman Jan" autocomplete="off" style="flex:1;padding:11px 12px;border:1px solid var(--border);border-radius:10px;font-size:1rem;font-family:var(--font)">
+          <button class="btn btn-primary" id="addLenerBtn" style="flex:0 0 auto">➕ Toevoegen</button>
+        </div>
+        <div id="lenerChips" style="display:flex;flex-wrap:wrap;gap:7px;margin-top:12px"></div>
+      </div>
+    </details>
+
+    <details class="card collapsible">
       <summary><span>🧑‍🤝‍🧑 Deelnemers beheren <span id="deelnemerCnt" style="font-weight:600;color:var(--muted);font-size:.82rem"></span></span><span class="chev">▸</span></summary>
       <div class="collapsible-body">
         <p class="note" style="margin-top:0;margin-bottom:10px">Beheer wie er meedoen. Deelnemers verschijnen bij "Wie ben jij?" en als keuze bij "Voor wie" op elk item.</p>
@@ -418,18 +430,9 @@ details.card .collapsible-body{padding:0 16px 16px}
 
   <!-- ============ LEENLIJST ============ -->
   <section class="panel" id="panel-leenlijst">
-    <div class="card">
-      <h2>👥 Uitleners beheren</h2>
-      <p class="note" style="margin-top:0;margin-bottom:10px">Maak hier de mensen aan van wie je leent. Ze verschijnen dan als keuze bij "Geleend van" op elk item.</p>
-      <div style="display:flex;gap:8px">
-        <input id="newLener" placeholder="Naam, bv. buurman Jan" autocomplete="off" style="flex:1;padding:11px 12px;border:1px solid var(--border);border-radius:10px;font-size:1rem;font-family:var(--font)">
-        <button class="btn btn-primary" id="addLenerBtn" style="flex:0 0 auto">➕ Toevoegen</button>
-      </div>
-      <div id="lenerChips" style="display:flex;flex-wrap:wrap;gap:7px;margin-top:12px"></div>
-    </div>
     <div class="card" style="background:var(--rood-licht);border-color:#f3c9c5">
       <h2>🤝 Geleende spullen — per persoon</h2>
-      <p class="note" style="margin-top:0">Alles wat je van iemand leent, gegroepeerd per uitlener. Handig om na de rally alles makkelijk terug te geven. Tik <strong>↩︎ teruggegeven</strong> zodra je iets hebt teruggebracht — dan verdwijnt het uit de lijst.</p>
+      <p class="note" style="margin-top:0">Alles wat je van iemand leent, gegroepeerd per uitlener. Handig om na de rally alles makkelijk terug te geven. Tik <strong>↩︎ teruggegeven</strong> zodra je iets hebt teruggebracht — dan verdwijnt het uit de lijst.<br><span style="opacity:.8">Uitleners zelf beheer je onderaan de <strong>Checklist</strong>-tab.</span></p>
     </div>
     <div class="search field" style="margin-bottom:10px">
       <input id="leenSearch" placeholder="🔍 Zoeken in leenlijst…" autocomplete="off">
@@ -799,6 +802,7 @@ function refreshLenerDatalist(){
   $('#leenNames').innerHTML=UITLENERS.map(u=>`<option value="${esc(u.naam)}">`).join('');
 }
 function renderLenerChips(){
+  const cnt=$('#lenerCnt'); if(cnt) cnt.textContent=UITLENERS.length?`(${UITLENERS.length})`:'';
   const box=$('#lenerChips');if(!box)return;
   if(!UITLENERS.length){box.innerHTML='<span class="note">Nog geen uitleners aangemaakt.</span>';return;}
   box.innerHTML=UITLENERS.map(u=>`<span class="lener-chip">${esc(u.naam)}<button title="hernoemen" onclick="renameLener('${esc(u.naam)}')">✏️</button><button title="verwijderen" onclick="delLener('${esc(u.naam)}')">✕</button></span>`).join('');
