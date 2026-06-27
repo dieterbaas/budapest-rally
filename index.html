@@ -392,7 +392,7 @@ details.card .collapsible-body{padding:0 16px 16px}
     <div id="clList"></div>
 
     <details class="card collapsible" style="margin-top:22px">
-      <summary><span>🧑‍🤝‍🧑 Deelnemers beheren</span><span class="chev">▸</span></summary>
+      <summary><span>🧑‍🤝‍🧑 Deelnemers beheren <span id="deelnemerCnt" style="font-weight:600;color:var(--muted);font-size:.82rem"></span></span><span class="chev">▸</span></summary>
       <div class="collapsible-body">
         <p class="note" style="margin-top:0;margin-bottom:10px">Beheer wie er meedoen. Deelnemers verschijnen bij "Wie ben jij?" en als keuze bij "Voor wie" op elk item.</p>
         <div style="display:flex;gap:8px">
@@ -404,7 +404,7 @@ details.card .collapsible-body{padding:0 16px 16px}
     </details>
 
     <details class="card collapsible">
-      <summary><span>💶 Sponsors beheren</span><span class="chev">▸</span></summary>
+      <summary><span>💶 Sponsors beheren <span id="sponsorCnt" style="font-weight:600;color:var(--muted);font-size:.82rem"></span></span><span class="chev">▸</span></summary>
       <div class="collapsible-body">
         <p class="note" style="margin-top:0;margin-bottom:10px">Beheer de sponsorlijst. Sponsors verschijnen als keuze bij "Sponsor" op elk item. Een nieuw getypte sponsor bij een item wordt trouwens automatisch toegevoegd.</p>
         <div style="display:flex;gap:8px">
@@ -801,7 +801,16 @@ function refreshLenerDatalist(){
 function renderLenerChips(){
   const box=$('#lenerChips');if(!box)return;
   if(!UITLENERS.length){box.innerHTML='<span class="note">Nog geen uitleners aangemaakt.</span>';return;}
-  box.innerHTML=UITLENERS.map(u=>`<span class="lener-chip">${esc(u.naam)}<button title="verwijderen" onclick="delLener('${esc(u.naam)}')">✕</button></span>`).join('');
+  box.innerHTML=UITLENERS.map(u=>`<span class="lener-chip">${esc(u.naam)}<button title="hernoemen" onclick="renameLener('${esc(u.naam)}')">✏️</button><button title="verwijderen" onclick="delLener('${esc(u.naam)}')">✕</button></span>`).join('');
+}
+async function renameLener(oud){
+  const nieuw=(prompt(`Nieuwe naam voor "${oud}":`,oud)||'').trim();
+  if(!nieuw||nieuw===oud)return;
+  if(UITLENERS.some(u=>u.naam.toLowerCase()===nieuw.toLowerCase())){toast('Die naam bestaat al',true);return;}
+  const {error}=await sb.from('uitleners').update({naam:nieuw}).eq('naam',oud);
+  if(error){toast('Hernoemen mislukt',true);return;}
+  await sb.from('checklist').update({geleend_van:nieuw,updated_at:new Date().toISOString()}).eq('geleend_van',oud);
+  toast('Hernoemd ✓');loadUitleners();loadCL();
 }
 async function addLener(naam){
   naam=(naam||'').trim();
@@ -847,9 +856,19 @@ async function loadDeelnemers(){
   if($('#whoModal').classList.contains('show')) renderWhoChoices(); // ververs keuze als modal openstaat
 }
 function renderDeelnemerChips(){
+  const cnt=$('#deelnemerCnt'); if(cnt) cnt.textContent=DEELNEMERS_ROWS.length?`(${DEELNEMERS_ROWS.length})`:'';
   const box=$('#deelnemerChips');if(!box)return;
   if(!DEELNEMERS_ROWS.length){box.innerHTML='<span class="note">Nog geen deelnemers.</span>';return;}
-  box.innerHTML=DEELNEMERS_ROWS.map(d=>`<span class="deelnemer-chip">${esc(d.naam)}<button title="verwijderen" onclick="delDeelnemer('${esc(d.naam)}')">✕</button></span>`).join('');
+  box.innerHTML=DEELNEMERS_ROWS.map(d=>`<span class="deelnemer-chip">${esc(d.naam)}<button title="hernoemen" onclick="renameDeelnemer('${esc(d.naam)}')">✏️</button><button title="verwijderen" onclick="delDeelnemer('${esc(d.naam)}')">✕</button></span>`).join('');
+}
+async function renameDeelnemer(oud){
+  const nieuw=(prompt(`Nieuwe naam voor "${oud}":`,oud)||'').trim();
+  if(!nieuw||nieuw===oud)return;
+  if(DEELNEMERS_ROWS.some(d=>d.naam.toLowerCase()===nieuw.toLowerCase())){toast('Die naam bestaat al',true);return;}
+  const {error}=await sb.from('deelnemers').update({naam:nieuw}).eq('naam',oud);
+  if(error){toast('Hernoemen mislukt',true);return;}
+  await sb.from('checklist').update({voor_wie:nieuw,updated_at:new Date().toISOString()}).eq('voor_wie',oud);
+  toast('Hernoemd ✓');loadDeelnemers();loadCL();
 }
 $('#addDeelnemerBtn').onclick=async()=>{
   const v=$('#newDeelnemer').value.trim();
@@ -882,9 +901,19 @@ function refreshSponsorDatalist(){
   const dl=$('#sponNames'); if(dl) dl.innerHTML=SPONSORS.map(s=>`<option value="${esc(s.naam)}">`).join('');
 }
 function renderSponsorChips(){
+  const cnt=$('#sponsorCnt'); if(cnt) cnt.textContent=SPONSORS.length?`(${SPONSORS.length})`:'';
   const box=$('#sponsorChips');if(!box)return;
   if(!SPONSORS.length){box.innerHTML='<span class="note">Nog geen sponsors.</span>';return;}
-  box.innerHTML=SPONSORS.map(s=>`<span class="sponsor-chip">${esc(s.naam)}<button title="verwijderen" onclick="delSponsor('${esc(s.naam)}')">✕</button></span>`).join('');
+  box.innerHTML=SPONSORS.map(s=>`<span class="sponsor-chip">${esc(s.naam)}<button title="hernoemen" onclick="renameSponsor('${esc(s.naam)}')">✏️</button><button title="verwijderen" onclick="delSponsor('${esc(s.naam)}')">✕</button></span>`).join('');
+}
+async function renameSponsor(oud){
+  const nieuw=(prompt(`Nieuwe naam voor "${oud}":`,oud)||'').trim();
+  if(!nieuw||nieuw===oud)return;
+  if(SPONSORS.some(s=>s.naam.toLowerCase()===nieuw.toLowerCase())){toast('Die sponsor bestaat al',true);return;}
+  const {error}=await sb.from('sponsors').update({naam:nieuw}).eq('naam',oud);
+  if(error){toast('Hernoemen mislukt',true);return;}
+  await sb.from('checklist').update({sponsor:nieuw,updated_at:new Date().toISOString()}).eq('sponsor',oud);
+  toast('Hernoemd ✓');loadSponsors();loadCL();
 }
 $('#addSponsorBtn').onclick=async()=>{
   const v=$('#newSponsor').value.trim();
