@@ -1,0 +1,6 @@
+# Netlify deploy-config voor de Budapest Rally app.
+# Alleen index.html wordt gepubliceerd (niet de .xlsx of losse bestanden).
+# Bron blijft de root-index.html; de build kopieert die naar dist/.
+[build]
+  publish = "dist"
+  command = "rm -rf dist && mkdir dist && cp index.html dist/index.html"
