@@ -26,6 +26,19 @@ alter table uitleners enable row level security;
 drop policy if exists "uitleners open" on uitleners;
 create policy "uitleners open" on uitleners for all using (true) with check (true);
 
+-- Sponsors (gedeelde, aanvulbare lijst) — selecteren per item
+create table if not exists sponsors (
+  id uuid primary key default gen_random_uuid(),
+  naam text not null unique,
+  created_at timestamptz default now()
+);
+alter table sponsors enable row level security;
+drop policy if exists "sponsors open" on sponsors;
+create policy "sponsors open" on sponsors for all using (true) with check (true);
+insert into sponsors (naam) values
+  ('Kwekerij Baas'),('Tuinplantenmarkt Ens'),('DTS Ens'),('VWC'),('Emmprove')
+on conflict (naam) do nothing;
+
 -- DEEL 2: reisverslag + foto's
 create extension if not exists pgcrypto;
 
@@ -329,7 +342,8 @@ details.card .collapsible-body{padding:0 16px 16px}
       <div class="grid2">
         <div class="field">
           <label for="nWie">👤 Voor wie <span style="font-weight:500;text-transform:none">(optie)</span></label>
-          <input id="nWie" placeholder="bv. Rik" autocomplete="off">
+          <input id="nWie" list="wieNames" placeholder="kies of typ een naam" autocomplete="off">
+          <datalist id="wieNames"></datalist>
         </div>
         <div class="field">
           <label for="nLeen">🤝 Geleend van <span style="font-weight:500;text-transform:none">(optie)</span></label>
@@ -339,7 +353,8 @@ details.card .collapsible-body{padding:0 16px 16px}
       </div>
       <div class="field">
         <label for="nSpon">💶 Sponsor <span style="font-weight:500;text-transform:none">(optie)</span></label>
-        <input id="nSpon" placeholder="bv. Garage Bos" autocomplete="off">
+        <input id="nSpon" list="sponNames" placeholder="kies of typ een sponsor" autocomplete="off">
+        <datalist id="sponNames"></datalist>
       </div>
       <p class="note" style="margin-top:-4px;margin-bottom:10px">Bij een aantal groter dan 1 worden er net zoveel losse items aangemaakt (bv. <em>(1/4)</em> … <em>(4/4)</em>), elk apart af te vinken en per stuk te koppelen aan wie je 'm van leent.</p>
       <button class="btn btn-primary" id="addBtn" style="width:100%">➕ Toevoegen</button>
@@ -433,10 +448,10 @@ details.card .collapsible-body{padding:0 16px 16px}
     <div class="field"><label for="eLabel">Wat</label><input id="eLabel" autocomplete="off"></div>
     <div class="field"><label for="eCat">Categorie</label><input id="eCat" list="catList" autocomplete="off"></div>
     <div class="grid2">
-      <div class="field"><label for="eWie">👤 Voor wie</label><input id="eWie" autocomplete="off"></div>
+      <div class="field"><label for="eWie">👤 Voor wie</label><input id="eWie" list="wieNames" autocomplete="off"></div>
       <div class="field"><label for="eLeen">🤝 Geleend van</label><input id="eLeen" list="leenNames" autocomplete="off"></div>
     </div>
-    <div class="field"><label for="eSpon">💶 Sponsor</label><input id="eSpon" autocomplete="off"></div>
+    <div class="field"><label for="eSpon">💶 Sponsor</label><input id="eSpon" list="sponNames" autocomplete="off"></div>
     <div style="display:flex;gap:8px;margin-top:6px">
       <button class="btn btn-ghost" id="eDelete" style="flex:0 0 auto">🗑️</button>
       <button class="btn btn-ghost" id="eCancel" style="flex:1">Annuleren</button>
@@ -450,7 +465,7 @@ details.card .collapsible-body{padding:0 16px 16px}
     <h3>👥 Dupliceer voor andere persoon</h3>
     <input type="hidden" id="dId">
     <p class="note" style="margin-bottom:10px">Maakt een kopie van dit item, gekoppeld aan een andere persoon. Handig als iedereen z'n eigen exemplaar nodig heeft.</p>
-    <div class="field"><label for="dWie">👤 Voor wie</label><input id="dWie" placeholder="bv. Sebastiaan" autocomplete="off"></div>
+    <div class="field"><label for="dWie">👤 Voor wie</label><input id="dWie" list="wieNames" placeholder="kies of typ een naam" autocomplete="off"></div>
     <div style="display:flex;gap:8px;margin-top:6px">
       <button class="btn btn-ghost" id="dCancel" style="flex:1">Annuleren</button>
       <button class="btn btn-primary" id="dSave" style="flex:1">Dupliceren</button>
@@ -553,6 +568,13 @@ async function loadCL(){
 function refreshCats(){
   const cats=[...new Set(CL.map(i=>i.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'nl'));
   $('#catList').innerHTML=cats.map(c=>`<option value="${esc(c)}">`).join('');
+  refreshWieDatalist();
+}
+// "voor wie"-opzoeklijst: vaste Knurft-namen + namen die al ergens gebruikt zijn
+function refreshWieDatalist(){
+  const used=CL.map(i=>i.voor_wie).filter(Boolean);
+  const namen=[...new Set([...NAMEN,...used])].sort((a,b)=>a.localeCompare(b,'nl'));
+  const dl=$('#wieNames'); if(dl) dl.innerHTML=namen.map(n=>`<option value="${esc(n)}">`).join('');
 }
 
 function renderCL(){
@@ -658,6 +680,7 @@ $('#addBtn').onclick=async()=>{
   $('#addBtn').disabled=false;
   if(error){toast('Toevoegen mislukt',true);return;}
   if(leen)ensureLener(leen);
+  if(spon)ensureSponsor(spon);
   ['#nLabel','#nWie','#nLeen','#nSpon'].forEach(s=>$(s).value='');
   $('#nAantal').value='1';
   $('#nLabel').focus();
@@ -768,6 +791,27 @@ async function ensureLener(naam){
   loadUitleners();
 }
 
+/* ---------- SPONSORS (gedeelde lijst, automatisch aanvulbaar) ---------- */
+let SPONSORS=[]; // [{id,naam}]
+async function loadSponsors(){
+  const {data,error}=await sb.from('sponsors').select('*').order('naam',{ascending:true});
+  if(error){console.warn('sponsors laden mislukt',error);return;}
+  SPONSORS=data||[];
+  refreshSponsorDatalist();
+}
+function refreshSponsorDatalist(){
+  const dl=$('#sponNames'); if(dl) dl.innerHTML=SPONSORS.map(s=>`<option value="${esc(s.naam)}">`).join('');
+}
+// nieuw getypte sponsor automatisch bewaren in de gedeelde lijst
+async function ensureSponsor(naam){
+  naam=(naam||'').trim();
+  if(!naam)return;
+  if(SPONSORS.some(s=>s.naam.toLowerCase()===naam.toLowerCase()))return;
+  const {error}=await sb.from('sponsors').insert({naam});
+  if(error){console.warn('sponsor toevoegen mislukt',error);return;}
+  loadSponsors();
+}
+
 /* edit */
 function openEdit(id){
   const i=CL.find(x=>x.item_id===id);if(!i)return;
@@ -787,6 +831,7 @@ $('#eSave').onclick=async()=>{
   $('#eSave').disabled=false;
   if(error){toast('Opslaan mislukt',true);return;}
   if(upd.geleend_van)ensureLener(upd.geleend_van);
+  if(upd.sponsor)ensureSponsor(upd.sponsor);
   $('#editModal').classList.remove('show');toast('Opgeslagen ✓');loadCL();
 };
 $('#eDelete').onclick=async()=>{
@@ -1029,6 +1074,7 @@ $$('.modal-bg').forEach(m=>m.addEventListener('click',e=>{if(e.target===m && m.i
 function subscribeRealtime(){
   sb.channel('cl-rt').on('postgres_changes',{event:'*',schema:'public',table:'checklist'},()=>loadCL()).subscribe();
   sb.channel('uitleners-rt').on('postgres_changes',{event:'*',schema:'public',table:'uitleners'},()=>loadUitleners()).subscribe();
+  sb.channel('sponsors-rt').on('postgres_changes',{event:'*',schema:'public',table:'sponsors'},()=>loadSponsors()).subscribe();
   sb.channel('posts-rt').on('postgres_changes',{event:'*',schema:'public',table:'posts'},()=>{showNewBanner();loadFeed();}).subscribe();
   sb.channel('fotos-rt').on('postgres_changes',{event:'*',schema:'public',table:'fotos'},()=>loadFeed()).subscribe();
 }
@@ -1045,6 +1091,7 @@ function showNewBanner(){
    ============================================================ */
 loadCL();
 loadUitleners();
+loadSponsors();
 loadFeed();
 subscribeRealtime();
 </script>
