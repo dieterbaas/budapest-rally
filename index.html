@@ -137,6 +137,18 @@ header .sub{opacity:.85;font-size:.72rem;font-weight:500}
 /* ---------- Card / form ---------- */
 .card{background:var(--kaart);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--schaduw);margin-bottom:14px}
 .card h2{font-size:1rem;font-weight:800;margin-bottom:12px;display:flex;align-items:center;gap:8px;color:var(--rood-dark)}
+
+/* ---------- Inklapbare kaart (details/summary) ---------- */
+details.card{padding:0;overflow:hidden}
+details.card>summary{
+  list-style:none;cursor:pointer;padding:15px 16px;font-size:1rem;font-weight:800;color:var(--rood-dark);
+  display:flex;align-items:center;justify-content:space-between;gap:8px;user-select:none
+}
+details.card>summary::-webkit-details-marker{display:none}
+details.card>summary:hover{color:var(--rood)}
+details.card>summary .chev{color:var(--muted);font-size:.85rem;transition:transform .2s}
+details.card[open]>summary .chev{transform:rotate(90deg)}
+details.card .collapsible-body{padding:0 16px 16px}
 .field{display:flex;flex-direction:column;gap:5px;margin-bottom:11px}
 .field label{font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
 .field input,.field textarea,.field select{
@@ -296,8 +308,9 @@ header .sub{opacity:.85;font-size:.72rem;font-weight:500}
 
   <!-- ============ CHECKLIST ============ -->
   <section class="panel active" id="panel-checklist">
-    <div class="card">
-      <h2>➕ Item toevoegen</h2>
+    <details class="card collapsible">
+      <summary><span>➕ Item toevoegen</span><span class="chev">▸</span></summary>
+      <div class="collapsible-body">
       <div class="field">
         <label for="nLabel">Wat</label>
         <input id="nLabel" placeholder="bv. Reserveband + krik" autocomplete="off">
@@ -330,7 +343,8 @@ header .sub{opacity:.85;font-size:.72rem;font-weight:500}
       </div>
       <p class="note" style="margin-top:-4px;margin-bottom:10px">Bij een aantal groter dan 1 worden er net zoveel losse items aangemaakt (bv. <em>(1/4)</em> … <em>(4/4)</em>), elk apart af te vinken en per stuk te koppelen aan wie je 'm van leent.</p>
       <button class="btn btn-primary" id="addBtn" style="width:100%">➕ Toevoegen</button>
-    </div>
+      </div>
+    </details>
 
     <div class="search field" style="margin-bottom:10px">
       <input id="clSearch" placeholder="🔍 Zoeken in checklist…" autocomplete="off">
