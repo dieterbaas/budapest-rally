@@ -49,7 +49,7 @@ alter table deelnemers enable row level security;
 drop policy if exists "deelnemers open" on deelnemers;
 create policy "deelnemers open" on deelnemers for all using (true) with check (true);
 insert into deelnemers (naam) values
-  ('Knurft Roos'),('Knurft Dieter'),('Knurft Rik'),('Knurft Sebastiaan')
+  ('Roos'),('Dieter'),('Rik'),('Sebastiaan')
 on conflict (naam) do nothing;
 
 -- DEEL 2: reisverslag + foto's
@@ -408,7 +408,7 @@ details.card .collapsible-body{padding:0 16px 16px}
       <div class="collapsible-body">
         <p class="note" style="margin-top:0;margin-bottom:10px">Beheer wie er meedoen. Deelnemers verschijnen bij "Wie ben jij?" en als keuze bij "Voor wie" op elk item.</p>
         <div style="display:flex;gap:8px">
-          <input id="newDeelnemer" placeholder="Naam, bv. Knurft Jan" autocomplete="off" style="flex:1;padding:11px 12px;border:1px solid var(--border);border-radius:10px;font-size:1rem;font-family:var(--font)">
+          <input id="newDeelnemer" placeholder="Naam, bv. Jan" autocomplete="off" style="flex:1;padding:11px 12px;border:1px solid var(--border);border-radius:10px;font-size:1rem;font-family:var(--font)">
           <button class="btn btn-primary" id="addDeelnemerBtn" style="flex:0 0 auto">➕ Toevoegen</button>
         </div>
         <div id="deelnemerChips" style="display:flex;flex-wrap:wrap;gap:7px;margin-top:12px"></div>
@@ -481,7 +481,7 @@ details.card .collapsible-body{padding:0 16px 16px}
     <div class="who-choices" id="whoChoices"></div>
     <div class="field" id="whoOtherWrap" style="display:none;margin-top:12px">
       <label for="whoInput">Je naam</label>
-      <input id="whoInput" placeholder="bv. Knurft Jan" autocomplete="off">
+      <input id="whoInput" placeholder="bv. Jan" autocomplete="off">
       <button class="btn btn-primary" id="whoSave" style="width:100%;margin-top:10px">Opslaan</button>
     </div>
   </div>
@@ -552,14 +552,14 @@ const fmtDag = d => { try{ return new Date(d+'T00:00:00').toLocaleDateString('nl
 
 /* ---------- identiteit ("wie ben jij") ---------- */
 // fallback tot de deelnemers uit de database geladen zijn (zie loadDeelnemers)
-let DEELNEMERS = ['Knurft Roos','Knurft Dieter','Knurft Rik','Knurft Sebastiaan'];
+let DEELNEMERS = ['Roos','Dieter','Rik','Sebastiaan'];
 let WIE = localStorage.getItem('rally_wie') || '';
 function setWie(n){WIE=(n||'').trim();localStorage.setItem('rally_wie',WIE);$('#whoamiName').textContent=WIE||'wie ben jij?';}
 function pickWie(n){n=(n||'').trim();if(!n)return;setWie(n);$('#whoModal').classList.remove('show');toast('Hoi '+n+'! 👋');}
 function renderWhoChoices(){
   $('#whoChoices').innerHTML =
     DEELNEMERS.map(n=>`<button class="who-choice ${n===WIE?'sel':''}" data-naam="${esc(n)}">👤 ${esc(n)}</button>`).join('')
-    + `<button class="who-choice who-other" data-other="1">✏️ Overige Knurft…</button>`;
+    + `<button class="who-choice who-other" data-other="1">✏️ Iemand anders…</button>`;
 }
 function openWho(){
   renderWhoChoices();
@@ -617,7 +617,7 @@ function refreshCats(){
   $('#catList').innerHTML=cats.map(c=>`<option value="${esc(c)}">`).join('');
   refreshWieDatalist();
 }
-// "voor wie"-opzoeklijst: vaste Knurft-namen + namen die al ergens gebruikt zijn
+// "voor wie"-opzoeklijst: deelnemers + namen die al ergens gebruikt zijn
 function refreshWieDatalist(){
   const used=CL.map(i=>i.voor_wie).filter(Boolean);
   const namen=[...new Set([...DEELNEMERS,...used])].sort((a,b)=>a.localeCompare(b,'nl'));
