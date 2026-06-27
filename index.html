@@ -260,6 +260,18 @@ header .sub{opacity:.85;font-size:.72rem;font-weight:500}
 .note{font-size:.8rem;color:var(--muted);margin-top:6px}
 .banner{background:#fff8e1;border:1px solid #ffe082;color:#7c5d00;padding:10px 12px;border-radius:10px;font-size:.83rem;margin-bottom:12px;display:none}
 .banner.show{display:block}
+
+/* ---------- Naamkeuze (wie ben jij) ---------- */
+.who-choices{display:flex;flex-direction:column;gap:8px}
+.who-choice{
+  width:100%;padding:13px 16px;border:1px solid var(--border);background:var(--kaart);
+  border-radius:12px;font-size:1rem;font-weight:700;color:var(--inkt);cursor:pointer;
+  font-family:var(--font);text-align:left;transition:.12s;display:flex;align-items:center;gap:9px
+}
+.who-choice:hover{background:var(--rood-licht);border-color:var(--rood)}
+.who-choice:active{transform:scale(.98)}
+.who-choice.sel{background:var(--rood);border-color:var(--rood);color:#fff}
+.who-other{color:var(--muted)}
 </style>
 </head>
 <body>
@@ -390,12 +402,13 @@ header .sub{opacity:.85;font-size:.72rem;font-weight:500}
 <div class="modal-bg" id="whoModal">
   <div class="modal">
     <h3>👤 Wie ben jij?</h3>
-    <div class="field">
+    <p class="note" style="margin-top:0;margin-bottom:12px">Kies je naam — zo zien we wie wat afvinkt en wie verslagen plaatst.</p>
+    <div class="who-choices" id="whoChoices"></div>
+    <div class="field" id="whoOtherWrap" style="display:none;margin-top:12px">
       <label for="whoInput">Je naam</label>
-      <input id="whoInput" placeholder="bv. Sebastiaan" autocomplete="off">
+      <input id="whoInput" placeholder="bv. Knurft Jan" autocomplete="off">
+      <button class="btn btn-primary" id="whoSave" style="width:100%;margin-top:10px">Opslaan</button>
     </div>
-    <p class="note" style="margin-bottom:12px">Zo zien we wie wat afvinkt en wie verslagen plaatst.</p>
-    <button class="btn btn-primary" id="whoSave" style="width:100%">Opslaan</button>
   </div>
 </div>
 
@@ -463,13 +476,32 @@ function randId(){return Math.random().toString(36).slice(2,12);}
 const fmtDag = d => { try{ return new Date(d+'T00:00:00').toLocaleDateString('nl-NL',{weekday:'long',day:'numeric',month:'long'});}catch(e){return d;} };
 
 /* ---------- identiteit ("wie ben jij") ---------- */
+const NAMEN = ['Knurft Roos','Knurft Dieter','Knurft Rik','Knurft Sebastiaan'];
 let WIE = localStorage.getItem('rally_wie') || '';
-function setWie(n){WIE=n.trim();localStorage.setItem('rally_wie',WIE);$('#whoamiName').textContent=WIE||'wie ben jij?';}
-function openWho(){$('#whoInput').value=WIE;$('#whoModal').classList.add('show');setTimeout(()=>$('#whoInput').focus(),60);}
+function setWie(n){WIE=(n||'').trim();localStorage.setItem('rally_wie',WIE);$('#whoamiName').textContent=WIE||'wie ben jij?';}
+function pickWie(n){n=(n||'').trim();if(!n)return;setWie(n);$('#whoModal').classList.remove('show');toast('Hoi '+n+'! 👋');}
+function renderWhoChoices(){
+  $('#whoChoices').innerHTML =
+    NAMEN.map(n=>`<button class="who-choice ${n===WIE?'sel':''}" data-naam="${esc(n)}">👤 ${esc(n)}</button>`).join('')
+    + `<button class="who-choice who-other" data-other="1">✏️ Overige Knurft…</button>`;
+}
+function openWho(){
+  renderWhoChoices();
+  const isOther = WIE && !NAMEN.includes(WIE);       // huidige naam staat niet in de vaste lijst
+  $('#whoOtherWrap').style.display = isOther ? 'block' : 'none';
+  $('#whoInput').value = isOther ? WIE : '';
+  $('#whoModal').classList.add('show');
+  if(isOther) setTimeout(()=>$('#whoInput').focus(),60);
+}
+$('#whoChoices').addEventListener('click',e=>{
+  const b=e.target.closest('.who-choice'); if(!b) return;
+  if(b.dataset.other){ $('#whoOtherWrap').style.display='block'; setTimeout(()=>$('#whoInput').focus(),60); return; }
+  pickWie(b.dataset.naam);
+});
 $('#whoami').onclick=openWho;
-$('#whoSave').onclick=()=>{const v=$('#whoInput').value.trim();if(!v){toast('Vul je naam in',true);return;}setWie(v);$('#whoModal').classList.remove('show');toast('Hoi '+v+'! 👋');};
+$('#whoSave').onclick=()=>{const v=$('#whoInput').value.trim();if(!v){toast('Vul je naam in',true);return;}pickWie(v);};
 $('#whoInput')?.addEventListener('keydown',e=>{if(e.key==='Enter')$('#whoSave').click();});
-function ensureWie(){ if(WIE) return true; openWho(); toast('Vul eerst je naam in',true); return false; }
+function ensureWie(){ if(WIE) return true; openWho(); toast('Kies eerst je naam',true); return false; }
 setWie(WIE);
 if(!WIE) openWho();
 
