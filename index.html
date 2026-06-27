@@ -39,6 +39,19 @@ insert into sponsors (naam) values
   ('Kwekerij Baas'),('Tuinplantenmarkt Ens'),('DTS Ens'),('VWC'),('Emmprove')
 on conflict (naam) do nothing;
 
+-- Deelnemers (gedeelde lijst) — voedt "wie ben jij" + "voor wie"
+create table if not exists deelnemers (
+  id uuid primary key default gen_random_uuid(),
+  naam text not null unique,
+  created_at timestamptz default now()
+);
+alter table deelnemers enable row level security;
+drop policy if exists "deelnemers open" on deelnemers;
+create policy "deelnemers open" on deelnemers for all using (true) with check (true);
+insert into deelnemers (naam) values
+  ('Knurft Roos'),('Knurft Dieter'),('Knurft Rik'),('Knurft Sebastiaan')
+on conflict (naam) do nothing;
+
 -- DEEL 2: reisverslag + foto's
 create extension if not exists pgcrypto;
 
@@ -285,6 +298,9 @@ details.card .collapsible-body{padding:0 16px 16px}
 .sponsor-chip{display:inline-flex;align-items:center;gap:6px;background:#f3e5f5;color:#7b1fa2;border:1px solid #e1bee7;border-radius:999px;padding:6px 8px 6px 13px;font-size:.85rem;font-weight:700}
 .sponsor-chip button{background:none;border:none;color:#7b1fa2;cursor:pointer;font-size:1rem;line-height:1;padding:2px 4px;border-radius:50%}
 .sponsor-chip button:hover{background:#e1bee7}
+.deelnemer-chip{display:inline-flex;align-items:center;gap:6px;background:#e3f2fd;color:#1565c0;border:1px solid #90caf9;border-radius:999px;padding:6px 8px 6px 13px;font-size:.85rem;font-weight:700}
+.deelnemer-chip button{background:none;border:none;color:#1565c0;cursor:pointer;font-size:1rem;line-height:1;padding:2px 4px;border-radius:50%}
+.deelnemer-chip button:hover{background:#bbdefb}
 .note{font-size:.8rem;color:var(--muted);margin-top:6px}
 .banner{background:#fff8e1;border:1px solid #ffe082;color:#7c5d00;padding:10px 12px;border-radius:10px;font-size:.83rem;margin-bottom:12px;display:none}
 .banner.show{display:block}
@@ -361,6 +377,18 @@ details.card .collapsible-body{padding:0 16px 16px}
       </div>
       <p class="note" style="margin-top:-4px;margin-bottom:10px">Bij een aantal groter dan 1 worden er net zoveel losse items aangemaakt (bv. <em>(1/4)</em> … <em>(4/4)</em>), elk apart af te vinken en per stuk te koppelen aan wie je 'm van leent.</p>
       <button class="btn btn-primary" id="addBtn" style="width:100%">➕ Toevoegen</button>
+      </div>
+    </details>
+
+    <details class="card collapsible">
+      <summary><span>🧑‍🤝‍🧑 Deelnemers beheren</span><span class="chev">▸</span></summary>
+      <div class="collapsible-body">
+        <p class="note" style="margin-top:0;margin-bottom:10px">Beheer wie er meedoen. Deelnemers verschijnen bij "Wie ben jij?" en als keuze bij "Voor wie" op elk item.</p>
+        <div style="display:flex;gap:8px">
+          <input id="newDeelnemer" placeholder="Naam, bv. Knurft Jan" autocomplete="off" style="flex:1;padding:11px 12px;border:1px solid var(--border);border-radius:10px;font-size:1rem;font-family:var(--font)">
+          <button class="btn btn-primary" id="addDeelnemerBtn" style="flex:0 0 auto">➕ Toevoegen</button>
+        </div>
+        <div id="deelnemerChips" style="display:flex;flex-wrap:wrap;gap:7px;margin-top:12px"></div>
       </div>
     </details>
 
@@ -520,18 +548,19 @@ function randId(){return Math.random().toString(36).slice(2,12);}
 const fmtDag = d => { try{ return new Date(d+'T00:00:00').toLocaleDateString('nl-NL',{weekday:'long',day:'numeric',month:'long'});}catch(e){return d;} };
 
 /* ---------- identiteit ("wie ben jij") ---------- */
-const NAMEN = ['Knurft Roos','Knurft Dieter','Knurft Rik','Knurft Sebastiaan'];
+// fallback tot de deelnemers uit de database geladen zijn (zie loadDeelnemers)
+let DEELNEMERS = ['Knurft Roos','Knurft Dieter','Knurft Rik','Knurft Sebastiaan'];
 let WIE = localStorage.getItem('rally_wie') || '';
 function setWie(n){WIE=(n||'').trim();localStorage.setItem('rally_wie',WIE);$('#whoamiName').textContent=WIE||'wie ben jij?';}
 function pickWie(n){n=(n||'').trim();if(!n)return;setWie(n);$('#whoModal').classList.remove('show');toast('Hoi '+n+'! 👋');}
 function renderWhoChoices(){
   $('#whoChoices').innerHTML =
-    NAMEN.map(n=>`<button class="who-choice ${n===WIE?'sel':''}" data-naam="${esc(n)}">👤 ${esc(n)}</button>`).join('')
+    DEELNEMERS.map(n=>`<button class="who-choice ${n===WIE?'sel':''}" data-naam="${esc(n)}">👤 ${esc(n)}</button>`).join('')
     + `<button class="who-choice who-other" data-other="1">✏️ Overige Knurft…</button>`;
 }
 function openWho(){
   renderWhoChoices();
-  const isOther = WIE && !NAMEN.includes(WIE);       // huidige naam staat niet in de vaste lijst
+  const isOther = WIE && !DEELNEMERS.includes(WIE);  // huidige naam staat niet in de deelnemerslijst
   $('#whoOtherWrap').style.display = isOther ? 'block' : 'none';
   $('#whoInput').value = isOther ? WIE : '';
   $('#whoModal').classList.add('show');
@@ -588,7 +617,7 @@ function refreshCats(){
 // "voor wie"-opzoeklijst: vaste Knurft-namen + namen die al ergens gebruikt zijn
 function refreshWieDatalist(){
   const used=CL.map(i=>i.voor_wie).filter(Boolean);
-  const namen=[...new Set([...NAMEN,...used])].sort((a,b)=>a.localeCompare(b,'nl'));
+  const namen=[...new Set([...DEELNEMERS,...used])].sort((a,b)=>a.localeCompare(b,'nl'));
   const dl=$('#wieNames'); if(dl) dl.innerHTML=namen.map(n=>`<option value="${esc(n)}">`).join('');
 }
 
@@ -804,6 +833,40 @@ async function ensureLener(naam){
   if(UITLENERS.some(u=>u.naam.toLowerCase()===naam.toLowerCase()))return;
   await addLener(naam);
   loadUitleners();
+}
+
+/* ---------- DEELNEMERS (gedeelde lijst — voedt "wie ben jij" + "voor wie") ---------- */
+let DEELNEMERS_ROWS=[]; // [{id,naam}]
+async function loadDeelnemers(){
+  const {data,error}=await sb.from('deelnemers').select('*').order('naam',{ascending:true});
+  if(error){console.warn('deelnemers laden mislukt',error);return;}
+  DEELNEMERS_ROWS=data||[];
+  DEELNEMERS=DEELNEMERS_ROWS.map(d=>d.naam);
+  renderDeelnemerChips();
+  refreshWieDatalist();
+  if($('#whoModal').classList.contains('show')) renderWhoChoices(); // ververs keuze als modal openstaat
+}
+function renderDeelnemerChips(){
+  const box=$('#deelnemerChips');if(!box)return;
+  if(!DEELNEMERS_ROWS.length){box.innerHTML='<span class="note">Nog geen deelnemers.</span>';return;}
+  box.innerHTML=DEELNEMERS_ROWS.map(d=>`<span class="deelnemer-chip">${esc(d.naam)}<button title="verwijderen" onclick="delDeelnemer('${esc(d.naam)}')">✕</button></span>`).join('');
+}
+$('#addDeelnemerBtn').onclick=async()=>{
+  const v=$('#newDeelnemer').value.trim();
+  if(!v){toast('Vul een naam in',true);$('#newDeelnemer').focus();return;}
+  if(DEELNEMERS_ROWS.some(d=>d.naam.toLowerCase()===v.toLowerCase())){toast('Die deelnemer bestaat al',true);return;}
+  $('#addDeelnemerBtn').disabled=true;
+  const {error}=await sb.from('deelnemers').insert({naam:v});
+  $('#addDeelnemerBtn').disabled=false;
+  if(error){toast('Toevoegen mislukt',true);return;}
+  $('#newDeelnemer').value='';toast('Deelnemer toegevoegd ✓');loadDeelnemers();$('#newDeelnemer').focus();
+};
+$('#newDeelnemer')?.addEventListener('keydown',e=>{if(e.key==='Enter')$('#addDeelnemerBtn').click();});
+async function delDeelnemer(naam){
+  if(!confirm(`Deelnemer "${naam}" uit de lijst halen?\n(Bestaande items/vinkjes blijven staan.)`))return;
+  const {error}=await sb.from('deelnemers').delete().eq('naam',naam);
+  if(error){toast('Verwijderen mislukt',true);return;}
+  toast('Deelnemer verwijderd');loadDeelnemers();
 }
 
 /* ---------- SPONSORS (gedeelde lijst, automatisch aanvulbaar) ---------- */
@@ -1113,6 +1176,7 @@ function subscribeRealtime(){
   sb.channel('cl-rt').on('postgres_changes',{event:'*',schema:'public',table:'checklist'},()=>loadCL()).subscribe();
   sb.channel('uitleners-rt').on('postgres_changes',{event:'*',schema:'public',table:'uitleners'},()=>loadUitleners()).subscribe();
   sb.channel('sponsors-rt').on('postgres_changes',{event:'*',schema:'public',table:'sponsors'},()=>loadSponsors()).subscribe();
+  sb.channel('deelnemers-rt').on('postgres_changes',{event:'*',schema:'public',table:'deelnemers'},()=>loadDeelnemers()).subscribe();
   sb.channel('posts-rt').on('postgres_changes',{event:'*',schema:'public',table:'posts'},()=>{showNewBanner();loadFeed();}).subscribe();
   sb.channel('fotos-rt').on('postgres_changes',{event:'*',schema:'public',table:'fotos'},()=>loadFeed()).subscribe();
 }
@@ -1130,6 +1194,7 @@ function showNewBanner(){
 loadCL();
 loadUitleners();
 loadSponsors();
+loadDeelnemers();
 loadFeed();
 subscribeRealtime();
 </script>
