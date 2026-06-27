@@ -282,6 +282,9 @@ details.card .collapsible-body{padding:0 16px 16px}
 .lener-chip{display:inline-flex;align-items:center;gap:6px;background:#fff3e0;color:#e65100;border:1px solid #ffcc80;border-radius:999px;padding:6px 8px 6px 13px;font-size:.85rem;font-weight:700}
 .lener-chip button{background:none;border:none;color:#e65100;cursor:pointer;font-size:1rem;line-height:1;padding:2px 4px;border-radius:50%}
 .lener-chip button:hover{background:#ffe0b2}
+.sponsor-chip{display:inline-flex;align-items:center;gap:6px;background:#f3e5f5;color:#7b1fa2;border:1px solid #e1bee7;border-radius:999px;padding:6px 8px 6px 13px;font-size:.85rem;font-weight:700}
+.sponsor-chip button{background:none;border:none;color:#7b1fa2;cursor:pointer;font-size:1rem;line-height:1;padding:2px 4px;border-radius:50%}
+.sponsor-chip button:hover{background:#e1bee7}
 .note{font-size:.8rem;color:var(--muted);margin-top:6px}
 .banner{background:#fff8e1;border:1px solid #ffe082;color:#7c5d00;padding:10px 12px;border-radius:10px;font-size:.83rem;margin-bottom:12px;display:none}
 .banner.show{display:block}
@@ -358,6 +361,18 @@ details.card .collapsible-body{padding:0 16px 16px}
       </div>
       <p class="note" style="margin-top:-4px;margin-bottom:10px">Bij een aantal groter dan 1 worden er net zoveel losse items aangemaakt (bv. <em>(1/4)</em> … <em>(4/4)</em>), elk apart af te vinken en per stuk te koppelen aan wie je 'm van leent.</p>
       <button class="btn btn-primary" id="addBtn" style="width:100%">➕ Toevoegen</button>
+      </div>
+    </details>
+
+    <details class="card collapsible">
+      <summary><span>💶 Sponsors beheren</span><span class="chev">▸</span></summary>
+      <div class="collapsible-body">
+        <p class="note" style="margin-top:0;margin-bottom:10px">Beheer de sponsorlijst. Sponsors verschijnen als keuze bij "Sponsor" op elk item. Een nieuw getypte sponsor bij een item wordt trouwens automatisch toegevoegd.</p>
+        <div style="display:flex;gap:8px">
+          <input id="newSponsor" placeholder="Naam, bv. Garage Bos" autocomplete="off" style="flex:1;padding:11px 12px;border:1px solid var(--border);border-radius:10px;font-size:1rem;font-family:var(--font)">
+          <button class="btn btn-primary" id="addSponsorBtn" style="flex:0 0 auto">➕ Toevoegen</button>
+        </div>
+        <div id="sponsorChips" style="display:flex;flex-wrap:wrap;gap:7px;margin-top:12px"></div>
       </div>
     </details>
 
@@ -798,9 +813,32 @@ async function loadSponsors(){
   if(error){console.warn('sponsors laden mislukt',error);return;}
   SPONSORS=data||[];
   refreshSponsorDatalist();
+  renderSponsorChips();
 }
 function refreshSponsorDatalist(){
   const dl=$('#sponNames'); if(dl) dl.innerHTML=SPONSORS.map(s=>`<option value="${esc(s.naam)}">`).join('');
+}
+function renderSponsorChips(){
+  const box=$('#sponsorChips');if(!box)return;
+  if(!SPONSORS.length){box.innerHTML='<span class="note">Nog geen sponsors.</span>';return;}
+  box.innerHTML=SPONSORS.map(s=>`<span class="sponsor-chip">${esc(s.naam)}<button title="verwijderen" onclick="delSponsor('${esc(s.naam)}')">✕</button></span>`).join('');
+}
+$('#addSponsorBtn').onclick=async()=>{
+  const v=$('#newSponsor').value.trim();
+  if(!v){toast('Vul een naam in',true);$('#newSponsor').focus();return;}
+  if(SPONSORS.some(s=>s.naam.toLowerCase()===v.toLowerCase())){toast('Die sponsor bestaat al',true);return;}
+  $('#addSponsorBtn').disabled=true;
+  const {error}=await sb.from('sponsors').insert({naam:v});
+  $('#addSponsorBtn').disabled=false;
+  if(error){toast('Toevoegen mislukt',true);return;}
+  $('#newSponsor').value='';toast('Sponsor toegevoegd ✓');loadSponsors();$('#newSponsor').focus();
+};
+$('#newSponsor')?.addEventListener('keydown',e=>{if(e.key==='Enter')$('#addSponsorBtn').click();});
+async function delSponsor(naam){
+  if(!confirm(`Sponsor "${naam}" uit de lijst halen?\n(De items zelf blijven staan.)`))return;
+  const {error}=await sb.from('sponsors').delete().eq('naam',naam);
+  if(error){toast('Verwijderen mislukt',true);return;}
+  toast('Sponsor verwijderd');loadSponsors();
 }
 // nieuw getypte sponsor automatisch bewaren in de gedeelde lijst
 async function ensureSponsor(naam){
